@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@theme {
+  --color-aws-nav: #232f3e;
+  --color-aws-navHover: #37475a;
+  --color-aws-orange: #ff9900;
+  --color-aws-bg: #f2f3f3;
+  --color-aws-panel: #ffffff;
+  --color-aws-blue: #0073bb;
+  --color-aws-text: #16191f;
+}
+
+body {
+  @apply bg-aws-bg text-aws-text font-sans h-screen overflow-hidden;
+}
+
+.aws-btn-primary {
+  @apply bg-aws-orange hover:bg-[#ec8900] text-white font-bold py-1 px-4 rounded text-sm focus:outline-none focus:ring-2 focus:ring-aws-orange/50 border border-[#b05f00] shadow-sm transition-colors;
+}
+
+.aws-btn-secondary {
+  @apply bg-white hover:bg-aws-bg text-aws-text font-normal py-1 px-4 rounded text-sm border border-[#d5dbdb] shadow-sm focus:outline-none focus:ring-2 focus:ring-aws-blue/50 transition-colors;
+}
+
+.aws-input {
+  @apply border border-[#879596] rounded px-3 py-1.5 text-sm focus:border-aws-blue focus:ring-1 focus:ring-aws-blue focus:outline-none w-full shadow-inner;
+}
+
+.aws-link {
+  @apply text-aws-blue hover:underline cursor-pointer text-sm;
+}
