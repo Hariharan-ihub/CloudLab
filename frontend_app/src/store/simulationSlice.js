@@ -78,7 +78,8 @@ const simulationSlice = createSlice({
         subnet: [],
         securityGroup: [],
         secrets: [],
-        logGroups: []
+        logGroups: [],
+        iamGroups: []
     }
   },
   reducers: {
@@ -107,7 +108,7 @@ const simulationSlice = createSlice({
          state.isSubmitted = false;
          state.completedSteps = [];
          // Clear resources so we fetch fresh ones
-         state.resources = { ec2: [], s3: [], iam: [], iamRoles: [], iamPolicies: [], vpc: [], subnet: [], securityGroup: [], secrets: [], logGroups: [] };
+         state.resources = { ec2: [], s3: [], iam: [], iamRoles: [], iamPolicies: [], iamGroups: [], vpc: [], subnet: [], securityGroup: [], secrets: [], logGroups: [] };
       })
       .addCase(fetchResources.fulfilled, (state, action) => {
           const type = action.meta.arg.type;
@@ -124,11 +125,11 @@ const simulationSlice = createSlice({
 
           if (!type || type === 'EC2_INSTANCE') state.resources.ec2 = unique(action.payload.filter(r => r.resourceType === 'EC2_INSTANCE'), 'instanceId');
           if (!type || type === 'S3_BUCKET') state.resources.s3 = unique(action.payload.filter(r => r.resourceType === 'S3_BUCKET'), 'bucketName');
-          if (!type || type === 'IAM_USER' || type === 'IAM_ROLE' || type === 'IAM_POLICY') {
-               state.resources.iam = action.payload.filter(r => ['IAM_USER', 'IAM_ROLE', 'IAM_POLICY'].includes(r.resourceType));
-               // IAM likely needs specific dedup if we split it, but currently it's a mix. Leaving as is or dedup by _id? 
-               // Let's rely on _id for mixed list or better yet, unique names? 
-               // For now, IAM duplicates weren't reported, focusing on VPC/EC2.
+          if (!type || ['IAM_USER', 'IAM_ROLE', 'IAM_POLICY', 'IAM_GROUP'].includes(type)) {
+               state.resources.iam = unique(action.payload.filter(r => r.resourceType === 'IAM_USER'), 'userName');
+               state.resources.iamRoles = unique(action.payload.filter(r => r.resourceType === 'IAM_ROLE'), 'roleName');
+               state.resources.iamPolicies = unique(action.payload.filter(r => r.resourceType === 'IAM_POLICY'), 'policyName');
+               state.resources.iamGroups = unique(action.payload.filter(r => r.resourceType === 'IAM_GROUP'), 'groupName');
           }
           if (!type || type === 'VPC') state.resources.vpc = unique(action.payload.filter(r => r.resourceType === 'VPC'), 'vpcId');
           if (!type || type === 'SUBNET') state.resources.subnet = unique(action.payload.filter(r => r.resourceType === 'SUBNET'), 'subnetId');

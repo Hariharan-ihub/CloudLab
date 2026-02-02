@@ -4,7 +4,7 @@ import { validateStep, fetchResources } from '../store/simulationSlice';
 import ConfirmationModal from './ConfirmationModal';
 import SmartTerminal from './SmartTerminal';
 import toast from 'react-hot-toast';
-import { Terminal, Play, Square, RefreshCcw, Power, ChevronDown, CheckCircle, X, Trash2, Info } from 'lucide-react';
+import { Terminal, Play, Square, RefreshCcw, RefreshCw, Power, ChevronDown, ChevronRight, CheckCircle, X, Trash2, Info, Lock, Activity, Server, Tag, Shield, HardDrive, Network, Search } from 'lucide-react';
 
 const Ec2Dashboard = ({ activeLab }) => {
   const dispatch = useDispatch();
@@ -22,7 +22,11 @@ const Ec2Dashboard = ({ activeLab }) => {
     userData: '',
     keyPair: '',
     storage: { size: 8, type: 'gp3' },
-    sgMode: 'create'
+    keyPair: '',
+    storage: { size: 8, type: 'gp3' },
+    sgMode: 'create',
+    publicIp: true, // Network Settings Toggle
+    sgRules: { ssh: true, http: false, https: false } // Checkbox state
   });
   
   const [keyPairs, setKeyPairs] = useState(['my-key-pair', 'dev-key']);
@@ -35,6 +39,10 @@ const Ec2Dashboard = ({ activeLab }) => {
   const [actionsOpen, setActionsOpen] = useState(null); // ID of instance with open actions menu
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [viewInstance, setViewInstance] = useState(null);
+  const [activeDetailsTab, setActiveDetailsTab] = useState('Details'); // Details View Tab State
+  const [showKeyPairModal, setShowKeyPairModal] = useState(false); // Key Pair Modal
+  const [newKeyPairName, setNewKeyPairName] = useState('');
+  const [advancedDetailsOpen, setAdvancedDetailsOpen] = useState(false); // Accordion state
 
 
   
@@ -143,7 +151,18 @@ const Ec2Dashboard = ({ activeLab }) => {
 
 
   const resetWizard = () => {
-      setWizardState({ ami: null, instanceType: null, name: '', vpcId: '', subnetId: '', securityGroups: [], userData: '', sgMode: 'create' });
+      setWizardState({ 
+        ami: null, 
+        instanceType: null, 
+        name: '', 
+        vpcId: '', 
+        subnetId: '', 
+        securityGroups: [], 
+        userData: '', 
+        sgMode: 'create',
+        publicIp: true,
+        sgRules: { ssh: true, http: false, https: false }
+      });
       setShowLaunchSuccess(false);
       setOnLaunchPage(false);
   };
@@ -174,24 +193,107 @@ const Ec2Dashboard = ({ activeLab }) => {
               <div className="bg-white shadow rounded border border-gray-200">
                   <div className="border-b px-6">
                       <nav className="-mb-px flex space-x-6">
-                          {['Details', 'Security', 'Networking', 'Storage', 'Status checks', 'Tags'].map((tab, i) => (
-                              <button key={tab} className={`py-4 px-1 border-b-2 font-medium text-sm ${i===0 ? 'border-aws-orange text-aws-blue' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                          {['Details', 'Security', 'Networking', 'Storage', 'Monitoring', 'Tags'].map((tab) => (
+                              <button 
+                                key={tab} 
+                                onClick={() => setActiveDetailsTab(tab)}
+                                className={`py-4 px-1 border-b-2 font-medium text-sm ${activeDetailsTab === tab ? 'border-aws-orange text-aws-blue' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                              >
                                 {tab}
                               </button>
                           ))}
                       </nav>
                   </div>
                   <div className="p-6">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-8 text-sm">
-                          <div><div className="text-gray-500 mb-1">Instance ID</div><div className="font-mono">{viewInstance.state.instanceId}</div></div>
-                          <div><div className="text-gray-500 mb-1">Public IPv4 address</div><div>{viewInstance.state.status === 'running' ? `3.85.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}` : '-'}</div></div>
-                          <div><div className="text-gray-500 mb-1">Instance state</div><div className="capitalize">{viewInstance.state.status}</div></div>
-                          <div><div className="text-gray-500 mb-1">Instance type</div><div>{viewInstance.state.instanceType}</div></div>
-                          <div><div className="text-gray-500 mb-1">Private IPv4 DNS</div><div>ip-172-31-{Math.floor(Math.random()*255)}-{Math.floor(Math.random()*255)}.ec2.internal</div></div>
-                          <div><div className="text-gray-500 mb-1">VPC ID</div><div className="text-aws-blue cursor-pointer hover:underline">{viewInstance.state.vpcId || '-'}</div></div>
-                          <div><div className="text-gray-500 mb-1">Subnet ID</div><div className="text-aws-blue cursor-pointer hover:underline">{viewInstance.state.subnetId || '-'}</div></div>
-                          <div><div className="text-gray-500 mb-1">Key pair name</div><div>-</div></div>
-                      </div>
+                      {activeDetailsTab === 'Details' && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-8 text-sm">
+                            <div><div className="text-gray-500 mb-1">Instance ID</div><div className="font-mono">{viewInstance.state.instanceId}</div></div>
+                            <div><div className="text-gray-500 mb-1">Public IPv4 address</div><div>{viewInstance.state.status === 'running' ? `3.85.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}` : '-'}</div></div>
+                            <div><div className="text-gray-500 mb-1">Instance state</div><div className="capitalize flex items-center gap-1">
+                                {viewInstance.state.status === 'running' ? <CheckCircle size={14} className="text-green-500"/> : <Square size={14} className="text-red-500"/>}
+                                {viewInstance.state.status}
+                            </div></div>
+                            <div><div className="text-gray-500 mb-1">Instance type</div><div>{viewInstance.state.instanceType}</div></div>
+                            <div><div className="text-gray-500 mb-1">Private IPv4 DNS</div><div>ip-172-31-{Math.floor(Math.random()*255)}-{Math.floor(Math.random()*255)}.ec2.internal</div></div>
+                            <div><div className="text-gray-500 mb-1">VPC ID</div><div className="text-aws-blue cursor-pointer hover:underline">{viewInstance.state.vpcId || '-'}</div></div>
+                            <div><div className="text-gray-500 mb-1">Subnet ID</div><div className="text-aws-blue cursor-pointer hover:underline">{viewInstance.state.subnetId || '-'}</div></div>
+                            <div><div className="text-gray-500 mb-1">Key pair name</div><div>{viewInstance.state.keyPair || '-'}</div></div>
+                            <div><div className="text-gray-500 mb-1">AMI ID</div><div>{viewInstance.state.ami}</div></div>
+                            <div><div className="text-gray-500 mb-1">Launch time</div><div>2 mins ago</div></div>
+                        </div>
+                      )}
+
+                      {activeDetailsTab === 'Security' && (
+                          <div>
+                              <h3 className="font-bold mb-4">Security groups</h3>
+                              <div className="mb-4 text-aws-blue hover:underline cursor-pointer">sg-083291 (launch-wizard-1)</div>
+                              <h3 className="font-bold mb-2">Inbound rules</h3>
+                              <table className="w-full text-left text-sm border">
+                                  <thead className="bg-gray-100">
+                                      <tr><th className="p-2 border">Security group rule ID</th><th className="p-2 border">Port range</th><th className="p-2 border">Protocol</th><th className="p-2 border">Source</th></tr>
+                                  </thead>
+                                  <tbody>
+                                      <tr><td className="p-2 border text-aws-blue">sgr-0123456789</td><td className="p-2 border">22</td><td className="p-2 border">TCP</td><td className="p-2 border">0.0.0.0/0</td></tr>
+                                      <tr><td className="p-2 border text-aws-blue">sgr-9876543210</td><td className="p-2 border">80</td><td className="p-2 border">TCP</td><td className="p-2 border">0.0.0.0/0</td></tr>
+                                  </tbody>
+                              </table>
+                          </div>
+                      )}
+
+                      {activeDetailsTab === 'Networking' && (
+                          <div className="space-y-4">
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-6 text-sm">
+                                  <div><div className="text-gray-500">Public IPv4 address</div><div>{viewInstance.state.status === 'running' ? `3.85.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}` : '-'}</div></div>
+                                  <div><div className="text-gray-500">Private IPv4 address</div><div>172.31.25.109</div></div>
+                                  <div><div className="text-gray-500">VPC ID</div><div className="text-aws-blue">{viewInstance.state.vpcId || 'vpc-12345'}</div></div>
+                                  <div><div className="text-gray-500">Subnet ID</div><div className="text-aws-blue">{viewInstance.state.subnetId || 'subnet-67890'}</div></div>
+                                  <div><div className="text-gray-500">Network interface ID</div><div className="text-aws-blue">eni-0abcd1234</div></div>
+                              </div>
+                          </div>
+                      )}
+
+                      {activeDetailsTab === 'Storage' && (
+                          <div>
+                              <table className="w-full text-left text-sm border-collapse">
+                                  <thead className="bg-gray-100">
+                                      <tr><th className="p-2 border">Volume ID</th><th className="p-2 border">Size (GiB)</th><th className="p-2 border">Volume type</th><th className="p-2 border">Attachment status</th></tr>
+                                  </thead>
+                                  <tbody>
+                                      <tr>
+                                          <td className="p-2 border text-aws-blue">vol-0fab123987</td>
+                                          <td className="p-2 border">{viewInstance.state.storage?.size || 8}</td>
+                                          <td className="p-2 border">{viewInstance.state.storage?.type || 'gp3'}</td>
+                                          <td className="p-2 border">Attached</td>
+                                      </tr>
+                                  </tbody>
+                              </table>
+                          </div>
+                      )}
+
+                      {activeDetailsTab === 'Monitoring' && (
+                          <div className="grid grid-cols-2 gap-4">
+                              <div className="border rounded p-4 h-48 flex items-center justify-center bg-gray-50 text-gray-500">CPU Utilization Graph Placeholder</div>
+                              <div className="border rounded p-4 h-48 flex items-center justify-center bg-gray-50 text-gray-500">Network In/Out Graph Placeholder</div>
+                              <div className="col-span-2">
+                                  <label className="flex items-center space-x-2">
+                                      <input type="checkbox" className="rounded text-aws-blue" />
+                                      <span className="text-sm">Enable detailed monitoring (Additional charges apply)</span>
+                                  </label>
+                              </div>
+                          </div>
+                      )}
+
+                      {activeDetailsTab === 'Tags' && (
+                          <table className="w-full text-left text-sm border">
+                                  <thead className="bg-gray-100">
+                                      <tr><th className="p-2 border">Key</th><th className="p-2 border">Value</th></tr>
+                                  </thead>
+                                  <tbody>
+                                      <tr><td className="p-2 border">Name</td><td className="p-2 border">{viewInstance.state.name}</td></tr>
+                                      <tr><td className="p-2 border">CreatedBy</td><td className="p-2 border">CloudLab Simulation</td></tr>
+                                  </tbody>
+                           </table>
+                      )}
                   </div>
               </div>
           </div>
@@ -304,6 +406,55 @@ const Ec2Dashboard = ({ activeLab }) => {
               {showConnectModal && connectingInstance && (
                   <SmartTerminal instance={connectingInstance} onClose={() => setShowConnectModal(false)} />
               )}
+              
+              {/* Key Pair Creation Modal */}
+              {showKeyPairModal && (
+                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                      <div className="bg-white rounded p-6 w-[400px] shadow-xl">
+                          <h2 className="text-xl font-bold mb-4">Create key pair</h2>
+                          <div className="mb-4">
+                              <label className="block text-sm font-bold mb-1">Key pair name</label>
+                              <input 
+                                type="text" 
+                                className="aws-input" 
+                                placeholder="my-key-pair" 
+                                value={newKeyPairName} 
+                                onChange={e => setNewKeyPairName(e.target.value)} 
+                              />
+                          </div>
+                          <div className="mb-4">
+                              <label className="block text-sm font-bold mb-1">Key pair type</label>
+                              <div className="flex gap-4">
+                                  <label className="flex items-center"><input type="radio" checked name="ktype" className="mr-2"/> RSA</label>
+                                  <label className="flex items-center"><input type="radio" name="ktype" className="mr-2"/> ED25519</label>
+                              </div>
+                          </div>
+                          <div className="mb-4">
+                               <label className="block text-sm font-bold mb-1">Private key file format</label>
+                               <div className="flex gap-4">
+                                  <label className="flex items-center"><input type="radio" checked name="kformat" className="mr-2"/> .pem</label>
+                                  <label className="flex items-center"><input type="radio" name="kformat" className="mr-2"/> .ppk</label>
+                              </div>
+                          </div>
+                          <div className="flex justify-end space-x-2">
+                              <button className="aws-btn-secondary" onClick={() => setShowKeyPairModal(false)}>Cancel</button>
+                              <button 
+                                className="aws-btn-primary" 
+                                onClick={() => {
+                                    if(!newKeyPairName) return toast.error('Name is required');
+                                    setKeyPairs([...keyPairs, newKeyPairName]);
+                                    setWizardState(prev => ({ ...prev, keyPair: newKeyPairName }));
+                                    setShowKeyPairModal(false);
+                                    setNewKeyPairName('');
+                                    toast.success('Key pair created and downloaded');
+                                }}
+                              >
+                                  Create key pair
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+              )}
 
               {/* Summary Panel */}
               {selectedIds.size > 0 && (
@@ -359,7 +510,8 @@ const Ec2Dashboard = ({ activeLab }) => {
                         const defaultVpc = resources.vpc?.[0]?.state.vpcId || '';
                         const defaultSubnet = resources.subnet?.[0]?.state.subnetId || '';
                         const defaultSg = resources.securityGroup?.[0]?.state.groupId || '';
-                        setWizardState({
+                        setWizardState(prev => ({
+                            ...prev,
                             ami: 'ami-al2023',
                             instanceType: 't2.micro',
                             name: 'Marketing-Server',
@@ -367,7 +519,7 @@ const Ec2Dashboard = ({ activeLab }) => {
                             subnetId: defaultSubnet,
                             securityGroups: defaultSg ? [defaultSg] : [],
                             userData: '#!/bin/bash\nyum update -y\nyum install -y httpd\nsystemctl start httpd'
-                        });
+                        }));
 
                         // Trigger Validation for Auto-filled steps
                         if (activeLab?.steps) {
@@ -427,65 +579,31 @@ const Ec2Dashboard = ({ activeLab }) => {
                   </div>
               </div>
              <div className="space-y-4">
-                 {/* Quick Start Tabs */}
-                 <div className="border-b border-gray-200">
-                     <div className="flex space-x-6 overflow-x-auto pb-2">
-                         {['Amazon Linux', 'macOS', 'Ubuntu', 'Windows', 'Red Hat', 'Debian'].map(os => {
-                             const active = (wizardState.ami && wizardState.ami.includes(os.toLowerCase().replace(' ', '-'))) || (os === 'Amazon Linux' && wizardState.ami === 'ami-al2023');
-                             return (
-                                 <button 
-                                     key={os}
-                                     className={`flex flex-col items-center space-y-2 min-w-[80px] px-2 py-2 rounded hover:bg-gray-50 transition-colors ${active ? 'border-b-2 border-aws-blue bg-blue-50' : 'border-b-2 border-transparent'}`}
-                                     onClick={() => {
-                                         // Mock map
-                                         const map = { 'Amazon Linux': 'ami-al2023', 'macOS': 'ami-mac', 'Ubuntu': 'ami-ubuntu', 'Windows': 'ami-win', 'Red Hat': 'ami-rhel', 'Debian': 'ami-deb' };
-                                         setWizardState({...wizardState, ami: map[os]});
-                                     }}
-                                 >
-                                     <div className={`w-10 h-10 rounded border flex items-center justify-center bg-white ${active ? 'border-aws-blue' : 'border-gray-300'}`}>
-                                         {/* Simple Icon Placeholders */}
-                                         <span className="text-xs font-bold text-gray-600">{os.substr(0,2).toUpperCase()}</span>
-                                     </div>
-                                     <span className={`text-xs font-medium ${active ? 'text-aws-blue' : 'text-gray-600'}`}>{os}</span>
-                                 </button>
-                             );
-                         })}
+             <div className="space-y-2">
+                 {/* Radio Card List for AMI */}
+                 {[
+                    { name: 'Amazon Linux', id: 'ami-al2023', desc: 'Amazon Linux 2023 AMI', free: true },
+                    { name: 'Ubuntu', id: 'ami-ubuntu', desc: 'Ubuntu Server 22.04 LTS', free: true },
+                    { name: 'Windows', id: 'ami-win', desc: 'Microsoft Windows Server 2022 Base', free: true },
+                    { name: 'Red Hat', id: 'ami-rhel', desc: 'Red Hat Enterprise Linux 9', free: true },
+                    { name: 'macOS', id: 'ami-mac', desc: 'macOS Monterey', free: false }
+                 ].map(ami => (
+                     <div 
+                        key={ami.name}
+                        onClick={() => setWizardState({...wizardState, ami: ami.id})}
+                        className={`border rounded p-4 cursor-pointer flex items-start justify-between ${wizardState.ami === ami.id ? 'border-aws-blue bg-blue-50 ring-1 ring-aws-blue' : 'border-gray-200 hover:border-gray-300'}`}
+                     >
+                        <div className="flex items-start">
+                            <input type="radio" checked={wizardState.ami === ami.id} readOnly className="mt-1 mr-3 text-aws-blue focus:ring-aws-orange" />
+                            <div>
+                                <div className="font-bold text-sm">{ami.desc}</div>
+                                <div className="text-xs text-gray-500 mt-1">{ami.name === 'macOS' ? 'Mac users' : 'Free tier eligible'}</div>
+                            </div>
+                        </div>
+                        {ami.free && <span className="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded border border-green-200 mt-1">Free tier eligible</span>}
                      </div>
-                 </div>
-
-                 {/* AMI Detail Box */}
-                 <div className="border border-gray-300 rounded p-4 bg-white">
-                     <div className="flex justify-between items-start mb-2">
-                         <div className="text-sm font-bold text-gray-800">
-                             {wizardState.ami === 'ami-al2023' ? 'Amazon Linux 2023 AMI' : 
-                              wizardState.ami === 'ami-ubuntu' ? 'Ubuntu Server 22.04 LTS' : 
-                              wizardState.ami === 'ami-mac' ? 'macOS Monterey' : 'Selected Machine Image'}
-                         </div>
-                         <span className="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded border border-green-200 font-medium">Free tier eligible</span>
-                     </div>
-                     <div className="text-xs text-gray-600 mb-4">
-                         {wizardState.ami === 'ami-al2023' ? 'Amazon Linux 2023 (AL2023) is a modern, general-purpose Linux-based OS that provides a secure, stable, and high-performance execution environment.' : 'A stable, supported, and secure execution environment for your applications.'}
-                     </div>
-                     
-                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                         <div>
-                             <div className="text-gray-500 mb-1">Architecture</div>
-                             <select className="aws-input py-1"><option>64-bit (x86)</option><option>64-bit (Arm)</option></select>
-                         </div>
-                         <div>
-                             <div className="text-gray-500 mb-1">AMI ID</div>
-                             <div className="font-mono text-gray-800 pt-1">{wizardState.ami}</div>
-                         </div>
-                         <div>
-                             <div className="text-gray-500 mb-1">Virtualization</div>
-                             <div className="text-gray-800 pt-1">hvm</div>
-                         </div>
-                         <div>
-                             <div className="text-gray-500 mb-1">ENA enabled</div>
-                             <div className="text-gray-800 pt-1">Yes</div>
-                         </div>
-                     </div>
-                 </div>
+                 ))}
+             </div>
              </div>
           </div>
 
@@ -496,61 +614,30 @@ const Ec2Dashboard = ({ activeLab }) => {
                       <Info size={16} className="text-aws-blue hover:text-aws-orange cursor-pointer" />
                       <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-64 bg-black text-white text-xs rounded p-2 z-50">
                           <strong>Why t2.micro?</strong>
-                          <div className="mt-1">Instance types determine the CPU, Memory, and Network capacity. t2.micro is eligible for the Free Tier, making it great for learning.</div>
+                          <div className="mt-1">Instance types determine the CPU, Memory, and Network capacity. t2.micro is eligible for the Free Tier.</div>
                           <div className="absolute top-full right-1 w-2 h-2 bg-black transform rotate-45 -mt-1"></div>
                       </div>
                   </div>
               </div>
+             
              <div className="space-y-4">
-                 {/* Search Bar */}
-                 <div className="relative">
-                     <input type="text" placeholder="Search instance types (e.g. t2.micro)" className="aws-input pl-8" />
-                     <div className="absolute left-2.5 top-2 text-gray-400">
-                         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                     </div>
-                 </div>
-                 
-                 {/* Detailed Card */}
-                 <div className={`border rounded bg-white overflow-hidden ${wizardState.instanceType === 't2.micro' ? 'ring-2 ring-aws-blue border-aws-blue' : 'border-gray-300'}`}>
-                     {/* Header/Selection Row */}
-                     <div 
-                         className="p-4 cursor-pointer hover:bg-gray-50 flex justify-between items-start"
-                         onClick={() => {
-                             setWizardState({...wizardState, instanceType: 't2.micro'});
-                             const step = activeLab?.steps?.find(s => s.validationLogic?.field === 'instanceType');
-                             if (step) handleAction(step.stepId, 'SELECT_OPTION', { field: 'instanceType', value: 't2.micro' });
-                         }}
-                     >
-                         <div>
-                             <div className="font-bold text-sm flex items-center">
-                                 t2.micro 
-                                 <span className="ml-3 font-normal bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded border border-green-200">Free tier eligible</span>
-                             </div>
-                             <div className="text-xs text-gray-500 mt-1">Family: t2 | 1 vCPU | 1 GiB Memory | Low to Moderate Network Performance</div>
-                             <div className="text-xs text-gray-500 mt-1">On-Demand Linux base pricing: 0.0116 USD per Hour</div>
-                         </div>
-                         <div className="text-aws-blue">
-                             {wizardState.instanceType === 't2.micro' && <CheckCircle size={20} fill="#2563eb" className="text-white"/>}
-                         </div>
-                     </div>
-                 </div>
-
-                 {/* Non-selected Mock Item (t3.micro) to show comparison */}
-                 <div className={`border rounded bg-white overflow-hidden border-gray-300 opacity-60 hover:opacity-100`}>
-                     <div 
-                         className="p-4 cursor-pointer hover:bg-gray-50 flex justify-between items-start"
-                         onClick={() => setWizardState({...wizardState, instanceType: 't3.micro'})}
-                     >
-                         <div>
-                             <div className="font-bold text-sm flex items-center">
-                                 t3.micro 
-                                 <span className="ml-3 font-normal bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded border border-green-200">Free tier eligible</span>
-                             </div>
-                             <div className="text-xs text-gray-500 mt-1">Family: t3 | 2 vCPU | 1 GiB Memory | Up to 5 Gigabit</div>
-                         </div>
-                     </div>
-                 </div>
-             </div>
+                 <label className="block text-sm font-bold mb-1">Instance type</label>
+                 <select 
+                     className="aws-input"
+                     value={wizardState.instanceType || ''}
+                     onChange={(e) => {
+                         setWizardState({...wizardState, instanceType: e.target.value});
+                         const step = activeLab?.steps?.find(s => s.validationLogic?.field === 'instanceType');
+                         if (step) handleAction(step.stepId, 'SELECT_OPTION', { field: 'instanceType', value: e.target.value });
+                     }}
+                 >
+                     <option value="">Select instance type</option>
+                     <option value="t2.micro">t2.micro (1 vCPU, 1 GiB Memory) - Free tier eligible</option>
+                     <option value="t3.micro">t3.micro (2 vCPU, 1 GiB Memory) - Free tier eligible</option>
+                     <option value="t3.small">t3.small (2 vCPU, 2 GiB Memory)</option>
+                     <option value="m5.large">m5.large (2 vCPU, 8 GiB Memory)</option>
+                 </select>
+            </div>
           </div>
 
           <div className="bg-white shadow rounded p-6 mb-6 border border-gray-200">
@@ -581,12 +668,7 @@ const Ec2Dashboard = ({ activeLab }) => {
                         </select>
                         <button 
                             className="text-aws-blue text-sm hover:underline whitespace-nowrap"
-                            onClick={() => {
-                                const newKey = `key-${Math.floor(Math.random()*1000)}`;
-                                setKeyPairs([...keyPairs, newKey]);
-                                setWizardState(prev => ({ ...prev, keyPair: newKey }));
-                                toast.success(`Created key pair: ${newKey}`);
-                            }}
+                            onClick={() => setShowKeyPairModal(true)}
                         >
                             Create new key pair
                         </button>
@@ -632,7 +714,22 @@ const Ec2Dashboard = ({ activeLab }) => {
                             ))}
                         </select>
                      </div>
-                 </div>
+                     </div>
+                     <div className="col-span-1 md:col-span-2">
+                        <div className="flex justify-between items-center bg-gray-50 border p-3 rounded">
+                            <div className="text-sm font-bold text-gray-700">Auto-assign public IP</div>
+                            <div className="flex items-center">
+                                <span className={`mr-3 text-sm font-bold ${wizardState.publicIp ? 'text-gray-900' : 'text-gray-400'}`}>{wizardState.publicIp ? 'Enable' : 'Disable'}</span>
+                                <button 
+                                    onClick={() => setWizardState({ ...wizardState, publicIp: !wizardState.publicIp })}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${wizardState.publicIp ? 'bg-aws-orange' : 'bg-gray-300'}`}
+                                >
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${wizardState.publicIp ? 'translate-x-6' : 'translate-x-1'}`} />
+                                </button>
+                            </div>
+                        </div>
+                     </div>
+
 
                  <div className="space-y-2">
                     <div className="text-sm font-bold">Firewall (security groups)</div>
@@ -661,7 +758,7 @@ const Ec2Dashboard = ({ activeLab }) => {
                         </label>
                     </div>
 
-                    {wizardState.sgMode === 'select' ? (
+                     {wizardState.sgMode === 'select' ? (
                         <div className="border rounded p-2 max-h-32 overflow-y-auto bg-gray-50">
                              {(resources.securityGroup || []).map(sg => (
                                  <div key={sg._id} className="flex items-center mb-1">
@@ -682,17 +779,17 @@ const Ec2Dashboard = ({ activeLab }) => {
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            <div className="bg-gray-50 border border-gray-200 rounded p-4">
-                                <div className="flex items-center space-x-2 mb-2">
-                                    <input type="checkbox" checked readOnly className="text-aws-blue rounded" />
-                                    <div className="text-sm font-bold">Allow SSH traffic from</div>
-                                    <select className="text-xs border-gray-300 rounded"><option>Anywhere (0.0.0.0/0)</option><option>My IP</option></select>
-                                </div>
-                                <div className="text-xs text-gray-500 pl-6">Helps you connect to your instance</div>
+                            <div className="flex space-x-6 mb-2">
+                                <label className="flex items-center text-sm font-bold"><input type="checkbox" className="mr-2" checked={wizardState.sgRules?.ssh || false} onChange={e => setWizardState({...wizardState, sgRules: {...wizardState.sgRules, ssh: e.target.checked}})} /> Allow SSH traffic</label>
+                                <label className="flex items-center text-sm font-bold"><input type="checkbox" className="mr-2" checked={wizardState.sgRules?.http || false} onChange={e => setWizardState({...wizardState, sgRules: {...wizardState.sgRules, http: e.target.checked}})} /> Allow HTTP traffic</label>
+                                <label className="flex items-center text-sm font-bold"><input type="checkbox" className="mr-2" checked={wizardState.sgRules?.https || false} onChange={e => setWizardState({...wizardState, sgRules: {...wizardState.sgRules, https: e.target.checked}})} /> Allow HTTPS traffic</label>
                             </div>
-                            <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-xs flex items-start text-gray-700">
-                                <Info size={14} className="min-w-[14px] mt-0.5 mr-2 text-yellow-600"/>
-                                <span>Rules with source of 0.0.0.0/0 allow all IP addresses to access your instance. We recommend setting security group rules to allow access from known IP addresses only.</span>
+                            
+                            <div className="bg-gray-50 border border-gray-200 rounded p-4 space-y-2">
+                                {wizardState.sgRules?.ssh && <div className="grid grid-cols-3 text-xs gap-2 items-center"><span className="font-mono">SSH</span><span>TCP 22</span><span>0.0.0.0/0</span></div>}
+                                {wizardState.sgRules?.http && <div className="grid grid-cols-3 text-xs gap-2 items-center"><span className="font-mono">HTTP</span><span>TCP 80</span><span>0.0.0.0/0</span></div>}
+                                {wizardState.sgRules?.https && <div className="grid grid-cols-3 text-xs gap-2 items-center"><span className="font-mono">HTTPS</span><span>TCP 443</span><span>0.0.0.0/0</span></div>}
+                                {!wizardState.sgRules?.ssh && !wizardState.sgRules?.http && !wizardState.sgRules?.https && <div className="text-xs text-gray-400 italic">No rules selected.</div>}
                             </div>
                         </div>
                     )}
@@ -701,65 +798,112 @@ const Ec2Dashboard = ({ activeLab }) => {
           </div>
 
           <div className="bg-white shadow rounded p-6 mb-6 border border-gray-200">
-              <div className="flex justify-between items-center border-b pb-2 mb-4">
-                  <h2 className="font-bold">Configure storage</h2>
-                  <div className="group relative">
-                      <Info size={16} className="text-aws-blue hover:text-aws-orange cursor-pointer" />
-                      <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-64 bg-black text-white text-xs rounded p-2 z-50">
-                          <strong>Storage (EBS)</strong>
-                          <div className="mt-1">Your instance launches with a Root Volume. You can configure the size and volume type.</div>
-                          <div className="absolute top-full right-1 w-2 h-2 bg-black transform rotate-45 -mt-1"></div>
-                      </div>
-                  </div>
+               <div className="flex justify-between items-center mb-4">
+                   <h2 className="font-bold text-lg flex items-center">
+                       Configure storage
+                       <span className="text-aws-blue text-xs font-normal ml-2 cursor-pointer hover:underline">Info</span>
+                   </h2>
+                   <span className="text-aws-blue text-sm font-bold cursor-pointer hover:underline">Advanced</span>
+               </div>
+
+              <div className="border border-gray-300 rounded p-4">
+                 <div className="flex items-start space-x-3 mb-4">
+                     <span className="pt-2 text-sm">1x</span>
+                     
+                     <div className="w-24">
+                        <input 
+                            type="number" 
+                            className="aws-input h-9"
+                            value={wizardState.storage?.size || 8}
+                            onChange={(e) => setWizardState({...wizardState, storage: { ...wizardState.storage, size: parseInt(e.target.value) || 8 }})}
+                        />
+                     </div>
+                     <span className="pt-2 text-sm">GiB</span>
+
+                     {/* Custom Volume Type Selector */}
+                     <div className="relative w-64 group z-20">
+                        <div className="aws-input h-9 flex items-center justify-between cursor-pointer bg-white" tabIndex={0}>
+                            <span className="truncate text-sm">{
+                                {
+                                    'gp3': 'General Purpose SSD (gp3)',
+                                    'gp2': 'General Purpose SSD (gp2)',
+                                    'io1': 'Provisioned IOPS SSD (io1)', 
+                                    'io2': 'Provisioned IOPS SSD (io2)',
+                                    'standard': 'Magnetic (standard)'
+                                }[wizardState.storage?.type || 'gp3']
+                            }</span>
+                            <ChevronDown size={14} className="text-gray-500" />
+                        </div>
+                        
+                        {/* Dropdown Menu */}
+                        <div className="absolute top-full left-0 w-[400px] bg-white border border-gray-300 shadow-lg rounded-b mt-1 hidden group-focus-within:block z-50">
+                            <div className="p-2 border-b border-gray-100">
+                                <div className="relative">
+                                    <Search size={14} className="absolute left-2 top-2 text-gray-400"/>
+                                    <input className="w-full border border-gray-300 rounded pl-8 py-1 text-xs focus:outline-none focus:border-aws-blue" placeholder="Filter volume types"/>
+                                </div>
+                            </div>
+                            <div className="max-h-64 overflow-y-auto py-1">
+                                {[
+                                    { id: 'gp3', label: 'General purpose SSD (gp3)', free: true },
+                                    { id: 'gp2', label: 'General purpose SSD (gp2)', free: true },
+                                    { id: 'io1', label: 'Provisioned IOPS SSD (io1)', free: false },
+                                    { id: 'io2', label: 'Provisioned IOPS SSD (io2)', free: false },
+                                    { id: 'sc1', label: 'Cold HDD (sc1)', free: true, disabled: true, note: 'This volume type is not compatible with root volumes.' },
+                                    { id: 'st1', label: 'Throughput Optimized HDD (st1)', free: true, disabled: true, note: 'This volume type is not compatible with root volumes.' },
+                                    { id: 'standard', label: 'Magnetic (standard)', free: true }
+                                ].map(opt => (
+                                    <div 
+                                        key={opt.id}
+                                        className={`px-4 py-2 text-sm flex flex-col hover:bg-aws-blue hover:text-white cursor-pointer ${opt.disabled ? 'opacity-50 cursor-not-allowed hover:bg-white hover:text-gray-500' : ''}`}
+                                        onClick={() => !opt.disabled && setWizardState({...wizardState, storage: { ...wizardState.storage, type: opt.id, size: (opt.id === 'io1' || opt.id === 'io2') ? 100 : 8 }})}
+                                    >
+                                        <div className="flex justify-between items-center w-full">
+                                            <span>{opt.label}</span>
+                                            {opt.free && <span className="text-gray-500 text-xs italic group-hover:text-blue-100">Free tier eligible</span>}
+                                        </div>
+                                        {opt.note && <span className="text-xs text-red-500 mt-1">{opt.note}</span>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                     </div>
+
+                     <span className="pt-2 text-sm text-gray-500">Root volume, Not encrypted</span>
+                 </div>
+
+                 <button className="text-aws-blue font-bold text-sm border border-aws-blue rounded px-4 py-1 hover:bg-blue-50 mb-4">Add new volume</button>
+
+                 <div className="text-xs text-gray-600 mb-4 border-t pt-4">
+                    The selected AMI contains instance store volumes, however the instance does not allow any instance store volumes. None of the instance store volumes from the AMI will be accessible from the instance
+                 </div>
+                 
+                 <div className="text-xs text-gray-600 border-t pt-4 flex justify-between items-center">
+                     <span className="flex items-center"><RefreshCw size={12} className="mr-1"/> Click refresh to view backup information</span>
+                     <span className="text-aws-blue cursor-pointer hover:underline">Edit</span>
+                 </div>
               </div>
-             <div className="flex items-end space-x-4 border rounded p-4 bg-gray-50">
-                 <div className="w-24">
-                    <label className="block text-xs font-bold mb-1">Size (GiB)</label>
-                    <input 
-                        type="number" 
-                        className="aws-input"
-                        value={wizardState.storage?.size || 8}
-                        onChange={(e) => setWizardState({...wizardState, storage: { ...wizardState.storage, size: parseInt(e.target.value) || 8 }})}
-                    />
-                 </div>
-                 <div className="w-48">
-                    <label className="block text-xs font-bold mb-1">Volume Type</label>
-                    <select 
-                        className="aws-input"
-                        value={wizardState.storage?.type || 'gp3'}
-                        onChange={(e) => setWizardState({...wizardState, storage: { ...wizardState.storage, type: e.target.value }})}
-                    >
-                        <option value="gp2">General Purpose SSD (gp2)</option>
-                        <option value="gp3">General Purpose SSD (gp3)</option>
-                        <option value="io1">Provisioned IOPS SSD (io1)</option>
-                        <option value="standard">Magnetic (standard)</option>
-                    </select>
-                 </div>
-                 <div className="text-xs text-gray-500 pb-2">Root volume</div>
-             </div>
-          </div>
+           </div>
 
           <div className="bg-white shadow rounded p-6 mb-6 border border-gray-200">
-              <div className="flex justify-between items-center border-b pb-2 mb-4">
-                  <h2 className="font-bold">Advanced details</h2>
-                  <div className="group relative">
-                      <Info size={16} className="text-aws-blue hover:text-aws-orange cursor-pointer" />
-                      <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-64 bg-black text-white text-xs rounded p-2 z-50">
-                          <strong>Why use User Data?</strong>
-                          <div className="mt-1">User data scripts run when your instance launches. Use this to install software, apply updates, or configure the instance automatically (bootstrapping).</div>
-                          <div className="absolute top-full right-1 w-2 h-2 bg-black transform rotate-45 -mt-1"></div>
-                      </div>
-                  </div>
+              <div className="flex justify-between items-center border-b pb-2 mb-4 cursor-pointer" onClick={() => setAdvancedDetailsOpen(!advancedDetailsOpen)}>
+                  <h2 className="font-bold flex items-center">
+                      <ChevronRight size={20} className={`mr-2 transform transition-transform ${advancedDetailsOpen ? 'rotate-90' : ''}`} /> 
+                      Advanced details
+                  </h2>
               </div>
-             <div className="mb-4">
-                 <label className="block text-sm font-bold mb-1">User data <span className="text-gray-500 font-normal">(Optional)</span></label>
-                 <textarea 
-                    className="aws-input h-32 font-mono text-xs" 
-                    placeholder="#!/bin/bash&#10;yum update -y&#10;yum install -y httpd&#10;systemctl start httpd"
-                    value={wizardState.userData}
-                    onChange={(e) => setWizardState({...wizardState, userData: e.target.value})}
-                 />
-             </div>
+              
+              {advancedDetailsOpen && (
+                 <div className="mb-4">
+                     <label className="block text-sm font-bold mb-1">User data <span className="text-gray-500 font-normal">(Optional)</span></label>
+                     <textarea 
+                        className="aws-input h-32 font-mono text-xs" 
+                        placeholder="#!/bin/bash&#10;yum update -y&#10;yum install -y httpd&#10;systemctl start httpd"
+                        value={wizardState.userData}
+                        onChange={(e) => setWizardState({...wizardState, userData: e.target.value})}
+                     />
+                 </div>
+              )}
           </div>
 
           <div className="bg-white shadow rounded p-6 mb-6 border border-gray-200">

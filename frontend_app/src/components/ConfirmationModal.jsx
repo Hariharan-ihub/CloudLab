@@ -5,8 +5,8 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, confir
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-in fade-in duration-200">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 overflow-hidden border border-gray-200 transform scale-100 transition-transform">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-in fade-in duration-200" onClick={onCancel}>
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 overflow-hidden border border-gray-200 transform scale-100 transition-transform" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-gray-50">
           <h3 className="text-lg font-bold text-gray-800 flex items-center">

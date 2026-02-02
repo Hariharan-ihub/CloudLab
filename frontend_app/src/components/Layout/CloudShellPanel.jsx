@@ -47,7 +47,7 @@ const CloudShellPanel = ({ onClose }) => {
                 else if (base === 'help') { 
                     output.push({ text: 'Available commands:', type: 'system' }); 
                     output.push({ text: '  aws ec2 describe-instances', type: 'output' });
-                    output.push({ text: '  aws ec2 run-instances --image-id <ami> --instance-type <type>', type: 'output' });
+                    output.push({ text: '  aws ec2 run-instances --image-id <ami> --instance-type <type> --block-device-mappings \'[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":100,"VolumeType":"io1"}}]\'', type: 'output' });
                     output.push({ text: '  aws ec2 create-vpc --cidr-block <cidr>', type: 'output' });
                     output.push({ text: '  aws ec2 create-subnet --vpc-id <vpc> --cidr-block <cidr>', type: 'output' });
                     output.push({ text: '  aws ec2 create-security-group --group-name <name>', type: 'output' });
@@ -274,6 +274,27 @@ const CloudShellPanel = ({ onClose }) => {
                         const imageIdIdx = parts.indexOf('--image-id');
                         const typeIdx = parts.indexOf('--instance-type');
                         
+                        // Parse block-device-mappings for storage config
+                        // Matches: --block-device-mappings '[{...}]' (single/double quotes or none)
+                        const mappingMatch = cmd.match(/--block-device-mappings\s+('[^']+'|"[^"]+"|\S+)/);
+                        let storageConfig = { size: 8, type: 'gp3' };
+
+                        if (mappingMatch) {
+                            try {
+                                // Remove outer quotes if present
+                                const jsonStr = mappingMatch[1].replace(/^['"]|['"]$/g, '');
+                                const mapping = JSON.parse(jsonStr);
+                                if (Array.isArray(mapping) && mapping.length > 0 && mapping[0].Ebs) {
+                                    storageConfig = {
+                                        size: mapping[0].Ebs.VolumeSize || 8,
+                                        type: mapping[0].Ebs.VolumeType || 'gp3'
+                                    };
+                                }
+                            } catch (e) {
+                                output.push({ text: 'Warning: Failed to parse block-device-mappings JSON', type: 'error' });
+                            }
+                        }
+
                         const payload = {
                             name: 'CLI-Created-Instance',
                             ami: imageIdIdx !== -1 ? parts[imageIdIdx + 1] : 'ami-al2023',
@@ -283,7 +304,7 @@ const CloudShellPanel = ({ onClose }) => {
                             securityGroups: ['sg-web'],
                             userData: '',
                             keyPair: 'cli-key',
-                            storage: { size: 8, type: 'gp3' }
+                            storage: storageConfig
                         };
 
                         try {
