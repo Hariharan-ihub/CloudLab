@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchLabById } from '../store/labSlice';
 import { setCurrentStep, startLab, fetchResources } from '../store/simulationSlice';
-import DefaultLabStepPanel from './LabStepPanel';
+import { USER_ID } from '../constants/user';
 import FakeEC2Console from './FakeEC2Console';
 import FakeS3Console from './FakeS3Console';
 import FakeIAMConsole from './FakeIAMConsole';
@@ -13,41 +13,43 @@ const LabRunner = () => {
   const { labId } = useParams();
   const dispatch = useDispatch();
   const { activeLab, loading, error } = useSelector((state) => state.lab);
-  const { currentStepId, isSubmitted, submissionResult } = useSelector(state => state.simulation);
-  
-  const userId = 'user-123'; // Hardcoded for now
+  const { isSubmitted, submissionResult, completedSteps } = useSelector(state => state.simulation);
+  const { user } = useSelector(state => state.auth);
+  const userId = user?.id;
 
   useEffect(() => {
     if (labId) {
+      if (!userId) {
+        console.warn('No user ID available');
+        return;
+      }
+
       // Logic: If activeLab matches current URL, assume "Resume Session" and SKIP Reset.
       if (activeLab && activeLab.labId === labId) {
            console.log('Resuming existing session for:', labId);
            // Just refresh resources to sync with Backend
-           dispatch(fetchResources({ userId: 'user-123', type: 'VPC' }));
-           dispatch(fetchResources({ userId: 'user-123', type: 'SUBNET' }));
-           dispatch(fetchResources({ userId: 'user-123', type: 'SECURITY_GROUP' }));
-           dispatch(fetchResources({ userId: 'user-123', type: 'EC2_INSTANCE' }));
+           const resourceTypes = ['VPC', 'SUBNET', 'SECURITY_GROUP', 'EC2_INSTANCE'];
+           resourceTypes.forEach(type => {
+             dispatch(fetchResources({ userId, type }));
+           });
       } else {
            console.log('Starting new session for:', labId);
            dispatch(fetchLabById(labId));
            // Start Simulation Environment (Reset & Seed)
-           dispatch(startLab({ userId: 'user-123', labId })).then(() => {
+           dispatch(startLab({ userId, labId })).then(() => {
                 // Fetch resources immediately after seeding
-                dispatch(fetchResources({ userId: 'user-123', type: 'VPC' }));
-                dispatch(fetchResources({ userId: 'user-123', type: 'SUBNET' }));
-                dispatch(fetchResources({ userId: 'user-123', type: 'SECURITY_GROUP' }));
-                dispatch(fetchResources({ userId: 'user-123', type: 'EC2_INSTANCE' }));
+                const resourceTypes = ['VPC', 'SUBNET', 'SECURITY_GROUP', 'EC2_INSTANCE'];
+                resourceTypes.forEach(type => {
+                  dispatch(fetchResources({ userId, type }));
+                });
            });
       }
     }
-  }, [labId, dispatch]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [labId, dispatch, activeLab, userId]);
 
   useEffect(() => {
     if (activeLab && activeLab.steps && activeLab.steps.length > 0) {
-        // Initialize simulation state if not set
-        // Logic to jump to first incomplete step
-        // Note: completedSteps is not defined in the provided context, assuming it's meant to be part of simulation state
-        const completedSteps = []; // Placeholder for now
+        // Initialize simulation state - jump to first incomplete step
         const firstIncomplete = activeLab.steps.find(s => !completedSteps.includes(s.stepId));
         if (firstIncomplete) {
             dispatch(setCurrentStep(firstIncomplete.stepId));
@@ -55,7 +57,7 @@ const LabRunner = () => {
              dispatch(setCurrentStep(activeLab.steps[0].stepId));
         }
     }
-  }, [activeLab, dispatch]); // Removed completedSteps from dependency array as it's a placeholder
+  }, [activeLab, dispatch, completedSteps]);
 
   if (loading) return <div>Loading Lab...</div>;
   if (error) return <div>Error loading lab: {error}</div>;

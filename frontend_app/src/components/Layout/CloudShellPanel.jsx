@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Maximize2, Minimize2, MoreHorizontal } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
 import { validateStep, fetchResources } from '../../store/simulationSlice';
+import { useAuth } from '../../hooks/useAuth';
 
 const CloudShellPanel = ({ onClose }) => {
     const dispatch = useDispatch();
     const { activeLab } = useSelector(state => state.lab);
     const { resources } = useSelector(state => state.simulation);
-    const userId = 'user-123';
+    const { userId } = useAuth();
 
     const [history, setHistory] = useState([
         { text: 'AWS CloudShell [CloudShell-User]', type: 'system' },

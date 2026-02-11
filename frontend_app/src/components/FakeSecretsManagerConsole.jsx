@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { validateStep, fetchResources } from '../store/simulationSlice';
+import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 import { Lock, Eye, EyeOff, Trash2, Plus, Key } from 'lucide-react';
 
 const FakeSecretsManagerConsole = () => {
     const dispatch = useDispatch();
     const { resources } = useSelector(state => state.simulation);
+    const { userId } = useAuth();
     const secrets = resources.secrets || [];
     
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -15,8 +17,6 @@ const FakeSecretsManagerConsole = () => {
     const [secretValue, setSecretValue] = useState('');
     
     const [revealedSecret, setRevealedSecret] = useState(null); // ID of secret to show value
-
-    const userId = 'user-123';
 
     useEffect(() => {
         dispatch(fetchResources({ userId, type: 'SECRETS_MANAGER_SECRET' }));

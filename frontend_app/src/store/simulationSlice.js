@@ -3,21 +3,41 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 export const validateStep = createAsyncThunk(
   'simulation/validateStep',
   async ({ userId, labId, stepId, action, payload }, { rejectWithValue }) => {
+    console.log('📡 [Redux] validateStep API call:', { userId, labId, stepId, action, payload });
+    
     try {
+      const token = localStorage.getItem('token');
+      const requestBody = { userId, labId, stepId, action, payload };
+      console.log('📤 [Redux] Sending request to /api/simulation/validate:', requestBody);
+      
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       const response = await fetch('/api/simulation/validate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ userId, labId, stepId, action, payload }),
+        headers,
+        body: JSON.stringify(requestBody),
       });
       
+      console.log('📥 [Redux] Response status:', response.status, response.statusText);
+      
       const data = await response.json();
+      console.log('📥 [Redux] Response data:', data);
+      
       if (!response.ok) {
+        console.error('❌ [Redux] API error response:', data);
         return rejectWithValue(data);
       }
+      
+      console.log('✅ [Redux] API success:', { ...data, stepId, action });
       return { ...data, stepId, action };
     } catch (error) {
+      console.error('❌ [Redux] Network/Request error:', error);
       return rejectWithValue({ message: error.message });
     }
   }
@@ -27,11 +47,18 @@ export const startLab = createAsyncThunk(
   'simulation/startLab',
   async ({ userId, labId }, { rejectWithValue }) => {
     try {
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       const response = await fetch('/api/simulation/start', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ userId, labId }),
       });
       
@@ -50,7 +77,16 @@ export const fetchResources = createAsyncThunk(
   'simulation/fetchResources',
   async ({ userId, type }, { rejectWithValue }) => {
     try {
-      const response = await fetch(`/api/simulation/resources?userId=${userId}&type=${type}`);
+      const token = localStorage.getItem('token');
+      const headers = {};
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`/api/simulation/resources?userId=${userId}&type=${type}`, {
+        headers
+      });
       if (!response.ok) throw new Error('Failed to fetch resources');
       return await response.json();
     } catch (error) {
@@ -63,11 +99,18 @@ export const submitLab = createAsyncThunk(
   'simulation/submitLab',
   async ({ userId, labId }, { rejectWithValue }) => {
     try {
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       const response = await fetch('/api/simulation/submit', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ userId, labId }),
       });
       
@@ -75,7 +118,8 @@ export const submitLab = createAsyncThunk(
       if (!response.ok) {
         return rejectWithValue(data);
       }
-      return data.submission;
+      // Return the submission object from the response
+      return data.submission || data;
     } catch (error) {
       return rejectWithValue({ message: error.message });
     }
@@ -183,22 +227,28 @@ const simulationSlice = createSlice({
           if (!type || type === 'EBS_VOLUME') state.resources.ebs = unique(action.payload.filter(r => r.resourceType === 'EBS_VOLUME'), 'volumeId');
       })
       .addCase(validateStep.pending, (state) => {
+        console.log('⏳ [Redux] validateStep.pending');
         state.validationStatus = 'validating';
       })
       .addCase(validateStep.fulfilled, (state, action) => {
-        const { success, message, stepId } = action.payload; 
+        const { success, message, stepId } = action.payload;
+        console.log('✅ [Redux] validateStep.fulfilled:', { success, message, stepId });
+        
         state.lastMessage = message;
         state.lastValidatedStepId = stepId;
         if (success) {
           state.validationStatus = 'success';
           if (stepId && !state.completedSteps.includes(stepId)) {
             state.completedSteps.push(stepId);
+            console.log('✅ [Redux] Step added to completedSteps:', stepId);
           }
         } else {
+          console.warn('⚠️ [Redux] Validation failed:', message);
           state.validationStatus = 'error';
         }
       })
       .addCase(validateStep.rejected, (state, action) => {
+        console.error('❌ [Redux] validateStep.rejected:', action.payload);
         state.validationStatus = 'error';
         state.lastMessage = action.payload?.message || 'Validation failed';
       });

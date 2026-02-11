@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { validateStep, fetchResources } from '../store/simulationSlice';
+import { useAuth } from '../hooks/useAuth';
 import ConfirmationModal from './ConfirmationModal';
 import toast from 'react-hot-toast';
 import { Network, Plus, Trash2, ArrowRight } from 'lucide-react';
@@ -8,6 +9,7 @@ import { Network, Plus, Trash2, ArrowRight } from 'lucide-react';
 const FakeVPCConsole = () => {
   const dispatch = useDispatch();
   const { resources } = useSelector(state => state.simulation);
+  const { userId } = useAuth();
   const vpcs = resources.vpc || [];
   const subnets = resources.subnet || [];
   const securityGroups = resources.securityGroup || [];
@@ -19,8 +21,6 @@ const FakeVPCConsole = () => {
   // Delete modal state
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
-
-  const userId = 'user-123';
 
   useEffect(() => {
     if (activeTab === 'vpcs') dispatch(fetchResources({ userId, type: 'VPC' }));

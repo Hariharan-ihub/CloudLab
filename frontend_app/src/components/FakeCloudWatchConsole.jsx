@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { validateStep, fetchResources } from '../store/simulationSlice';
+import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 import { Activity, Clock, FileText, ChevronRight } from 'lucide-react';
 
 const FakeCloudWatchConsole = () => {
     const dispatch = useDispatch();
     const { resources } = useSelector(state => state.simulation);
+    const { userId } = useAuth();
     const logGroups = resources.logGroups || [];
     
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -15,8 +17,6 @@ const FakeCloudWatchConsole = () => {
     const [activeGroup, setActiveGroup] = useState(null); // When drilling down into a group
     const [simulatedStreams, setSimulatedStreams] = useState([]);
     const [activeStream, setActiveStream] = useState(null);
-
-    const userId = 'user-123';
 
     useEffect(() => {
         dispatch(fetchResources({ userId, type: 'CLOUDWATCH_LOG_GROUP' }));

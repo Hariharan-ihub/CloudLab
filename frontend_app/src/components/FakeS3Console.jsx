@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { validateStep, fetchResources } from '../store/simulationSlice';
+import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 import { Search, Database, ArrowLeft, Upload, Trash2, File, ToggleLeft, ToggleRight, MoreVertical, RefreshCw, Eye } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
@@ -9,6 +10,7 @@ const FakeS3Console = () => {
     const dispatch = useDispatch();
     const { resources } = useSelector(state => state.simulation);
     const { activeLab } = useSelector(state => state.lab);
+    const { userId } = useAuth();
     const buckets = resources.s3 || [];
     
     // ... State ...
@@ -36,8 +38,6 @@ const FakeS3Console = () => {
     const [viewObject, setViewObject] = useState(null); 
     const [deleteConfirm, setDeleteConfirm] = useState({ show: false, type: null, name: null });
     const [activeTab, setActiveTab] = useState('Objects'); // Bucket Detail Tabs
-
-    const userId = 'user-123';
 
     // Fetch Resources
     useEffect(() => {

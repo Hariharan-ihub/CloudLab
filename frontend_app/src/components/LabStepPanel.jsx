@@ -6,8 +6,10 @@ import ConfirmationModal from './ConfirmationModal';
 
 const LabStepPanel = ({ lab, currentStepId }) => {
   const { completedSteps, validationStatus, lastMessage, isSubmitted, lastValidatedStepId, submissionStatus } = useSelector((state) => state.simulation);
+  const { user } = useSelector(state => state.auth);
   const dispatch = useDispatch();
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const userId = user?.id;
   
   // Find current step index
   const currentStepIndex = lab.steps.findIndex(s => s.stepId === currentStepId);
@@ -29,9 +31,12 @@ const LabStepPanel = ({ lab, currentStepId }) => {
   };
 
   const handleConfirmSubmit = () => {
+      if (!userId) {
+        console.error('User not authenticated');
+        return;
+      }
       setShowSubmitConfirm(false);
-      // submitLab is now an async thunk, pass userId and labId
-      dispatch(submitLab({ userId: 'user-123', labId: lab.labId })); 
+      dispatch(submitLab({ userId, labId: lab.labId })); 
   };
 
   return (

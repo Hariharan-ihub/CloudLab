@@ -2,6 +2,10 @@ const SimulatedResource = require('../models/SimulatedResource');
 const UserProgress = require('../models/UserProgress');
 const Step = require('../models/Step');
 const Lab = require('../models/Lab');
+const LabSubmission = require('../models/LabSubmission');
+const axios = require('axios');
+const geminiService = require('../services/geminiService');
+const youtubeService = require('../services/youtubeService');
 
 // Initialize Lab Environment
 exports.startLab = async (req, res) => {
@@ -77,39 +81,188 @@ exports.getResources = async (req, res) => {
 exports.validateAction = async (req, res) => {
   const { userId, labId, stepId, action, payload } = req.body;
 
+  console.log('🔍 [Backend] validateAction called:', {
+    userId,
+    labId,
+    stepId,
+    action,
+    payload: payload ? { ...payload, userData: payload.userData ? '[hidden]' : undefined } : null,
+    timestamp: new Date().toISOString()
+  });
+
   try {
     // 1. Validate Step (if associated with a Lab Step)
     let success = true;
     let message = 'Action completed.';
     
     if (stepId) {
+        console.log(`🔍 [Backend] Looking for step: stepId=${stepId}, labId=${labId}`);
         const step = await Step.findOne({ stepId: stepId, labId: labId });
+        
         if (step) {
+             console.log(`✅ [Backend] Step found:`, {
+               stepId: step.stepId,
+               title: step.title,
+               expectedAction: step.expectedAction,
+               order: step.order,
+               receivedAction: action
+             });
+             
              // 1a. Validate Sequence (New)
              if (step.order > 1) {
-                 const progress = await UserProgress.findOne({ userId, labId });
-                 // Find explicit previous step by order
-                 const prevStep = await Step.findOne({ labId: step.labId, order: step.order - 1 });
+                 console.log(`🔍 [Backend] Checking step sequence (order: ${step.order})`);
+                 let progress = await UserProgress.findOne({ userId, labId });
                  
-                 // If there is a previous step, and user has NO progress OR prev step is NOT in completedSteps
-                 if (prevStep && (!progress || !progress.completedSteps.includes(prevStep.stepId))) {
-                     return res.json({ success: false, message: `Please complete step ${step.order - 1}: ${prevStep.title} first.` });
+                 // Special handling for launch step - auto-complete missing steps if payload has data
+                 if (action === 'CLICK_FINAL_LAUNCH') {
+                   console.log(`🚀 [Backend] Launch action detected, checking for missing step validations...`);
+                   console.log(`📦 [Backend] Payload received:`, {
+                     name: payload?.name,
+                     ami: payload?.ami,
+                     instanceType: payload?.instanceType,
+                     vpcId: payload?.vpcId,
+                     subnetId: payload?.subnetId
+                   });
+                   
+                   // Get all previous steps - use labId string (not MongoDB _id)
+                   const allPreviousSteps = await Step.find({ 
+                     labId: labId,  // Use labId from request, not step.labId
+                     order: { $lt: step.order } 
+                   }).sort({ order: 1 });
+                   
+                   console.log(`🔍 [Backend] Found ${allPreviousSteps.length} previous steps for labId: ${labId}`);
+                   allPreviousSteps.forEach(s => {
+                     console.log(`  - Step ${s.order}: ${s.stepId} (${s.title})`);
+                   });
+                   
+                   // Initialize progress if it doesn't exist
+                   if (!progress) {
+                     progress = new UserProgress({ userId, labId, completedSteps: [], currentStep: step.stepId });
+                     console.log(`📝 [Backend] Created new progress record`);
+                   } else {
+                     console.log(`📝 [Backend] Existing progress:`, { completedSteps: progress.completedSteps });
+                   }
+                   
+                   // Check each previous step and auto-complete if payload has required data
+                   let allStepsComplete = true;
+                   for (const prevStep of allPreviousSteps) {
+                     const isCompleted = progress.completedSteps.includes(prevStep.stepId);
+                     
+                     if (!isCompleted) {
+                       console.log(`⚠️ [Backend] Step ${prevStep.order} (${prevStep.stepId}) not completed`);
+                       console.log(`   Validation logic:`, prevStep.validationLogic);
+                       console.log(`   Expected action:`, prevStep.expectedAction);
+                       
+                       // Check if payload has the required field for this step
+                       const stepField = prevStep.validationLogic?.field;
+                       const hasData = stepField && payload && payload[stepField];
+                       
+                       console.log(`   Checking payload for field "${stepField}":`, hasData ? `Found: ${payload[stepField]}` : 'Not found');
+                       
+                       // Special cases for steps that don't have field-based validation
+                       const stepType = prevStep.validationLogic?.type;
+                       const hasGenericData = !stepField && (
+                         (stepType === 'CLICK_BUTTON' && payload) ||
+                         (stepType === 'URL_CONTAINS' && payload) ||
+                         (prevStep.expectedAction === 'NAVIGATE' && payload)
+                       );
+                       
+                       if (hasData || hasGenericData) {
+                         console.log(`✅ [Backend] Auto-completing step ${prevStep.order} (${prevStep.stepId}) - payload has required data`);
+                         if (!progress.completedSteps.includes(prevStep.stepId)) {
+                           progress.completedSteps.push(prevStep.stepId);
+                           console.log(`   Added to completedSteps`);
+                         }
+                       } else {
+                         console.warn(`❌ [Backend] Step ${prevStep.order} (${prevStep.stepId}) missing required data:`);
+                         console.warn(`   Field: ${stepField}, Type: ${stepType}, Payload keys:`, Object.keys(payload || {}));
+                         allStepsComplete = false;
+                         const errorMsg = `Please complete step ${prevStep.order}: ${prevStep.title} first.`;
+                         await progress.save(); // Save any auto-completed steps
+                         console.log(`💾 [Backend] Saved progress before returning error`);
+                         return res.json({ success: false, message: errorMsg });
+                       }
+                     } else {
+                       console.log(`✅ [Backend] Step ${prevStep.order} (${prevStep.stepId}) already completed`);
+                     }
+                   }
+                   
+                   // Save progress with auto-completed steps
+                   if (allStepsComplete) {
+                     await progress.save();
+                     console.log(`✅ [Backend] All previous steps validated/completed. Saved progress:`, { completedSteps: progress.completedSteps });
+                   }
+                 } else {
+                   // Normal validation for non-launch actions
+                   const prevStep = await Step.findOne({ labId: step.labId, order: step.order - 1 });
+                   
+                   console.log(`🔍 [Backend] Previous step check:`, {
+                     prevStep: prevStep ? { stepId: prevStep.stepId, title: prevStep.title } : null,
+                     progress: progress ? { completedSteps: progress.completedSteps } : null
+                   });
+                   
+                   if (prevStep && (!progress || !progress.completedSteps.includes(prevStep.stepId))) {
+                     const errorMsg = `Please complete step ${step.order - 1}: ${prevStep.title} first.`;
+                     console.warn(`⚠️ [Backend] Step sequence validation failed: ${errorMsg}`);
+                     return res.json({ success: false, message: errorMsg });
+                   }
                  }
              }
 
-             if (step.expectedAction !== 'GENERIC' && step.expectedAction !== action) {
+             // Flexible action matching for SELECT operations
+             const isSelectAction = (expected, received) => {
+               // Map SELECT_OPTION to specific SELECT actions based on field
+               if (received === 'SELECT_OPTION' && payload?.field) {
+                 const fieldToActionMap = {
+                   'ami': 'SELECT_AMI',
+                   'instanceType': 'SELECT_INSTANCE_TYPE'
+                 };
+                 const mappedAction = fieldToActionMap[payload.field];
+                 return mappedAction === expected;
+               }
+               return expected === received;
+             };
+
+             if (step.expectedAction !== 'GENERIC' && !isSelectAction(step.expectedAction, action)) {
                  success = false;
-                 message = `Incorrect action. Expected ${step.expectedAction}`;
+                 message = `Incorrect action. Expected ${step.expectedAction}, got ${action}`;
+                 console.warn(`⚠️ [Backend] Action mismatch:`, { 
+                   expected: step.expectedAction, 
+                   received: action,
+                   payloadField: payload?.field 
+                 });
+             } else {
+                 console.log(`✅ [Backend] Action validation passed: ${action} (expected: ${step.expectedAction})`);
              }
              // Add payload validation logic here if needed details
+        } else {
+            console.warn(`⚠️ [Backend] Step not found: stepId=${stepId}, labId=${labId}`);
         }
+    } else {
+        console.log(`ℹ️ [Backend] No stepId provided, skipping step validation`);
     }
 
     // 2. Perform Side Effects (Simulate Cloud State) if validation passed (or if no step validation required)
     if (success) {
+        console.log(`✅ [Backend] Validation passed, processing action: ${action}`);
+        
         // --- EC2 HANDLERS ---
         if (action === 'CLICK_FINAL_LAUNCH') {
-            const newInstance = new SimulatedResource({
+            console.log('🚀 [Backend] Processing CLICK_FINAL_LAUNCH action');
+            console.log('📦 [Backend] Payload received:', {
+              name: payload?.name,
+              ami: payload?.ami,
+              instanceType: payload?.instanceType,
+              vpcId: payload?.vpcId,
+              subnetId: payload?.subnetId,
+              securityGroups: payload?.securityGroups,
+              hasUserData: !!payload?.userData,
+              hasKeyPair: !!payload?.keyPair,
+              storage: payload?.storage
+            });
+            
+            try {
+              const instanceData = {
                 userId,
                 resourceType: 'EC2_INSTANCE',
                 state: {
@@ -125,9 +278,34 @@ exports.validateAction = async (req, res) => {
                     launchTime: new Date().toISOString()
                 },
                 status: 'running'
-            });
-            await newInstance.save();
-            message = 'Instance launched successfully!';
+              };
+              
+              console.log('💾 [Backend] Creating instance:', {
+                userId: instanceData.userId,
+                resourceType: instanceData.resourceType,
+                state: {
+                  name: instanceData.state.name,
+                  ami: instanceData.state.ami,
+                  instanceType: instanceData.state.instanceType,
+                  instanceId: instanceData.state.instanceId
+                }
+              });
+              
+              const newInstance = new SimulatedResource(instanceData);
+              await newInstance.save();
+              
+              console.log('✅ [Backend] Instance saved successfully:', {
+                _id: newInstance._id,
+                instanceId: newInstance.state.instanceId,
+                name: newInstance.state.name
+              });
+              
+              message = 'Instance launched successfully!';
+            } catch (dbError) {
+              console.error('❌ [Backend] Database error saving instance:', dbError);
+              success = false;
+              message = `Database error: ${dbError.message}`;
+            }
         }
 
         if (action === 'TERMINATE_INSTANCE') {
@@ -538,16 +716,27 @@ exports.validateAction = async (req, res) => {
         }
     }
 
-    res.json({ success, message });
+    const response = { success, message };
+    console.log('📤 [Backend] Sending response:', response);
+    res.json(response);
 
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('❌ [Backend] validateAction error:', {
+      error: error.message,
+      stack: error.stack,
+      userId,
+      labId,
+      stepId,
+      action
+    });
+    res.status(500).json({ 
+      success: false,
+      message: error.message 
+    });
   }
 };
 
 // --- SUBMISSION LOGIC ---
-const LabSubmission = require('../models/LabSubmission');
-const axios = require('axios');
 
 exports.submitLab = async (req, res) => {
   const { userId, labId } = req.body;
@@ -562,91 +751,98 @@ exports.submitLab = async (req, res) => {
       const totalSteps = lab.steps.length;
       const score = Math.round((completedCount / totalSteps) * 100);
 
-      // 2. Generate Feedback (Simulated AI)
-      // Logic: Analyze which steps are missing or done
-      const feedback = {
+      // 2. Generate Feedback using Gemini AI (if available) or fallback
+      let feedback = {
           strengths: [],
           improvements: []
       };
 
-      if (score === 100) {
-          feedback.strengths.push('Excellent execution! You completed all steps perfectly.');
-          feedback.strengths.push('Demonstrated strong understanding of the core concepts.');
-      } else if (score > 50) {
-          feedback.strengths.push('Good progress! You successfully navigated the core workflow.');
-          feedback.improvements.push('Review the final verification steps to ensure resources are correctly deployed.');
-      } else {
-          feedback.improvements.push('It seems you got stuck early on. Try reviewing the lab scenario again.');
-          feedback.improvements.push('Focus on understanding the service prerequisites first.');
-      }
-
-      // Add specific feedback based on lab type (Example for EC2)
-      if (labId === 'lab-ec2-launch') {
-          if (progress?.completedSteps.includes('ec2-select-name')) {
-              feedback.strengths.push('Correctly identified and named the instance.');
-          }
-          if (!progress?.completedSteps.includes('ec2-select-type')) {
-              feedback.improvements.push('Understanding Instance Types (t2.micro vs others) is crucial for cost management.');
-          }
-          if (!progress?.completedSteps.includes('ec2-review-launch')) {
-             feedback.improvements.push('Don\'t forget to actually launch the instance after configuration!');
-          }
-      }
-
-      // 3. YouTube Search (Real API)
-      let youtubeResults = [];
-      const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY; // Expects this in .env
+      // Try to get feedback from Gemini AI
+      const completedSteps = progress?.completedSteps || [];
+      const geminiResult = await geminiService.generateFeedback(lab, progress, completedSteps);
       
-      if (YOUTUBE_API_KEY && feedback.improvements.length > 0) {
-          // Construct query from improvements
-          const queryTerm = feedback.improvements[0].replace('Review', '').replace('Understanding', '').trim() + ' AWS tutorial';
-          const query = encodeURIComponent(queryTerm);
-          
-          try {
-              const ytResponse = await axios.get(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=3&q=${query}&key=${YOUTUBE_API_KEY}&type=video`);
-              
-              if (ytResponse.data.items) {
-                  youtubeResults = ytResponse.data.items.map(item => ({
-                      videoId: item.id.videoId,
-                      title: item.snippet.title,
-                      thumbnail: item.snippet.thumbnails.medium.url,
-                      channelTitle: item.snippet.channelTitle,
-                      url: `https://www.youtube.com/watch?v=${item.id.videoId}`
-                  }));
-              }
-          } catch (ytError) {
-              console.warn(`YouTube API Warning: ${ytError.message} - Using fallback video.`);
-              // Fallback to default video so the user still sees the feature working
-              youtubeResults.push({
-                  videoId: '_jEGlMbeV4Q', 
-                  title: 'Recommended: AWS EC2 Masterclass (Fallback)',
-                  thumbnail: 'https://img.youtube.com/vi/_jEGlMbeV4Q/mqdefault.jpg',
-                  channelTitle: 'Recommended Channel',
-                  url: 'https://www.youtube.com/watch?v=_jEGlMbeV4Q'
-              });
-          }
+      if (geminiResult) {
+          // Use Gemini AI feedback (only one feedback object)
+          feedback = geminiResult;
+          console.log('✅ Generated feedback using Gemini AI');
       } else {
-          // Fallback if no key or perfect score
-          if(score < 100) {
-             youtubeResults.push({
-                 videoId: '_jEGlMbeV4Q', // Valid video ID
-                 title: 'Recommended: AWS EC2 Masterclass',
-                 thumbnail: 'https://img.youtube.com/vi/_jEGlMbeV4Q/mqdefault.jpg',
-                 channelTitle: 'Recommended Channel',
-                 url: 'https://www.youtube.com/watch?v=_jEGlMbeV4Q'
-             });
+          // Fallback to rule-based feedback
+          console.log('⚠️ Using fallback feedback (Gemini AI not available)');
+          
+          if (score === 100) {
+              feedback.strengths.push('Excellent execution! You completed all steps perfectly.');
+              feedback.strengths.push('Demonstrated strong understanding of the core concepts.');
+          } else if (score > 50) {
+              feedback.strengths.push('Good progress! You successfully navigated the core workflow.');
+              feedback.improvements.push('Review the final verification steps to ensure resources are correctly deployed.');
+          } else {
+              feedback.improvements.push('It seems you got stuck early on. Try reviewing the lab scenario again.');
+              feedback.improvements.push('Focus on understanding the service prerequisites first.');
+          }
+
+          // Add specific feedback based on lab type (Example for EC2)
+          if (labId === 'lab-ec2-launch') {
+              if (progress?.completedSteps.includes('ec2-select-name')) {
+                  feedback.strengths.push('Correctly identified and named the instance.');
+              }
+              if (!progress?.completedSteps.includes('ec2-select-type')) {
+                  feedback.improvements.push('Understanding Instance Types (t2.micro vs others) is crucial for cost management.');
+              }
+              if (!progress?.completedSteps.includes('ec2-review-launch')) {
+                 feedback.improvements.push('Don\'t forget to actually launch the instance after configuration!');
+              }
           }
       }
 
-      // 4. Save Submission
+      // 3. YouTube Search based on Suggested Improvements (always fetch 1-2 videos)
+      let youtubeResults = [];
+      
+      if (feedback.improvements && feedback.improvements.length > 0) {
+          try {
+              // Fetch videos based on improvements (minimum 1-2 videos)
+              console.log(`🔍 Searching YouTube for videos based on ${feedback.improvements.length} improvements...`);
+              youtubeResults = await youtubeService.searchVideos(feedback.improvements);
+              console.log(`✅ Found ${youtubeResults.length} YouTube videos based on improvements`);
+          } catch (error) {
+              console.error('❌ YouTube API error:', error.message);
+              console.error('Error details:', error);
+          }
+      } else {
+          console.log('⚠️ No improvements found, skipping YouTube search');
+      }
+      
+      // Fallback: If no videos found but we have improvements, add at least one fallback video
+      if (youtubeResults.length === 0 && feedback.improvements && feedback.improvements.length > 0) {
+          console.log('⚠️ No YouTube videos found, using fallback video');
+          // Extract key term from first improvement for fallback
+          const firstImprovement = feedback.improvements[0];
+          const searchTerm = firstImprovement.toLowerCase().includes('ec2') ? 'EC2' : 
+                           firstImprovement.toLowerCase().includes('s3') ? 'S3' :
+                           firstImprovement.toLowerCase().includes('iam') ? 'IAM' : 'AWS';
+          
+          youtubeResults.push({
+              videoId: '_jEGlMbeV4Q',
+              title: `Recommended: AWS ${searchTerm} Tutorial`,
+              thumbnail: 'https://img.youtube.com/vi/_jEGlMbeV4Q/mqdefault.jpg',
+              channelTitle: 'AWS Tutorials',
+              url: 'https://www.youtube.com/watch?v=_jEGlMbeV4Q',
+              description: `Learn AWS ${searchTerm} fundamentals`,
+              duration: '10:24',
+              relatedTo: firstImprovement
+          });
+      }
+
+      // 4. Save Submission (only one feedback object, no duplicate)
       const submission = new LabSubmission({
           userId,
           labId,
           score,
-          feedback,
+          feedback, // Single feedback object (from Gemini or fallback)
           youtubeResults
       });
       await submission.save();
+      
+      console.log(`💾 Saved submission to database with ${youtubeResults.length} videos`);
 
       res.json({
           success: true,
@@ -656,5 +852,51 @@ exports.submitLab = async (req, res) => {
   } catch (error) {
       console.error('Submission Error:', error);
       res.status(500).json({ message: error.message });
+  }
+};
+
+// Get submission by ID
+exports.getSubmission = async (req, res) => {
+  try {
+    const { submissionId } = req.params;
+    const submission = await LabSubmission.findById(submissionId);
+    
+    if (!submission) {
+      return res.status(404).json({ message: 'Submission not found' });
+    }
+    
+    res.json({
+      success: true,
+      submission
+    });
+  } catch (error) {
+    console.error('Get submission error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get user's submission for a lab
+exports.getUserSubmission = async (req, res) => {
+  try {
+    const { userId, labId } = req.query;
+    
+    if (!userId || !labId) {
+      return res.status(400).json({ message: 'userId and labId are required' });
+    }
+    
+    const submission = await LabSubmission.findOne({ userId, labId })
+      .sort({ submittedAt: -1 }); // Get most recent
+    
+    if (!submission) {
+      return res.status(404).json({ message: 'Submission not found' });
+    }
+    
+    res.json({
+      success: true,
+      submission
+    });
+  } catch (error) {
+    console.error('Get user submission error:', error);
+    res.status(500).json({ message: error.message });
   }
 };

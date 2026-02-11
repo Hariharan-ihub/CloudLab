@@ -1,5 +1,4 @@
 import React from 'react';
-import { useParams } from 'react-router-dom';
 import { Routes, Route } from 'react-router-dom';
 import FakeS3Console from './FakeS3Console';
 import FakeIAMConsole from './FakeIAMConsole';

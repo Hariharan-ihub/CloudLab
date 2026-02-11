@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { validateStep, fetchResources } from '../store/simulationSlice';
+import { store } from '../store/store';
 import ConfirmationModal from './ConfirmationModal';
 import SmartTerminal from './SmartTerminal';
 import toast from 'react-hot-toast';
@@ -9,6 +10,8 @@ import { Terminal, Play, Square, RefreshCcw, RefreshCw, Power, ChevronDown, Chev
 const Ec2Dashboard = ({ activeLab }) => {
   const dispatch = useDispatch();
   const { currentStepId, resources, completedSteps } = useSelector(state => state.simulation);
+  const { user } = useSelector(state => state.auth);
+  const userId = user?.id;
   const instances = resources.ec2 || [];
   
   // Local state for wizard
@@ -49,10 +52,12 @@ const Ec2Dashboard = ({ activeLab }) => {
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [actionInfo, setActionInfo] = useState({ type: '', instance: null }); // { type: 'terminate'|'stop'|'reboot', instance: ... }
 
-  const userId = 'user-123'; 
+  // userId is now from auth state 
 
   // Load instances and networking on mount
   useEffect(() => {
+     if (!userId) return;
+     
      dispatch(fetchResources({ userId, type: 'EC2_INSTANCE' }));
      dispatch(fetchResources({ userId, type: 'VPC' }));
      dispatch(fetchResources({ userId, type: 'SUBNET' }));
@@ -61,7 +66,7 @@ const Ec2Dashboard = ({ activeLab }) => {
          dispatch(fetchResources({ userId, type: 'EC2_INSTANCE' }));
       }, 5000);
       return () => clearInterval(interval);
-  }, [dispatch]);
+  }, [dispatch, userId]);
 
   // Validate navigation on mount (Step 1)
   useEffect(() => {
@@ -91,25 +96,43 @@ const Ec2Dashboard = ({ activeLab }) => {
   }, [activeLab, completedSteps]);
 
   const handleAction = async (stepId, action, payload) => {
-    const result = await dispatch(validateStep({
-      userId,
-      labId: activeLab?.labId || 'adhoc',
+    console.log('🚀 [EC2 Console] handleAction called:', {
       stepId,
       action,
-      payload
-    }));
-    
-    if (action === 'CLICK_FINAL_LAUNCH') {
-        if(result.payload?.success) {
-             setShowLaunchSuccess(true);
-             toast.success('Instance launched successfully!');
-             dispatch(fetchResources({ userId, type: 'EC2_INSTANCE' }));
+      payload,
+      labId: activeLab?.labId,
+      userId
+    });
+
+    try {
+      const result = await dispatch(validateStep({
+        userId,
+        labId: activeLab?.labId || 'adhoc',
+        stepId,
+        action,
+        payload
+      }));
+
+      console.log('✅ [EC2 Console] validateStep result:', result);
+
+      if (action === 'CLICK_FINAL_LAUNCH') {
+        if (result.payload?.success) {
+          console.log('✅ [EC2 Console] Launch successful:', result.payload);
+          setShowLaunchSuccess(true);
+          toast.success('Instance launched successfully!');
+          dispatch(fetchResources({ userId, type: 'EC2_INSTANCE' }));
         } else {
-             toast.error('Failed to launch instance.');
+          console.error('❌ [EC2 Console] Launch failed:', result.payload);
+          const errorMsg = result.payload?.message || 'Failed to launch instance.';
+          toast.error(errorMsg);
         }
-    } else {
+      } else {
         // Generic refresh for other actions
         setTimeout(() => dispatch(fetchResources({ userId, type: 'EC2_INSTANCE' })), 500); 
+      }
+    } catch (error) {
+      console.error('❌ [EC2 Console] handleAction error:', error);
+      toast.error(`Error: ${error.message || 'Failed to process action'}`);
     }
   };
 
@@ -526,7 +549,10 @@ const Ec2Dashboard = ({ activeLab }) => {
                              if (nameStep) handleAction(nameStep.stepId, 'INPUT_VALUE', { field: 'name', value: 'Marketing-Server' });
                              
                              const typeStep = activeLab.steps.find(s => s.validationLogic?.field === 'instanceType');
-                             if (typeStep) handleAction(typeStep.stepId, 'SELECT_OPTION', { field: 'instanceType', value: 't2.micro' });
+                             if (typeStep) handleAction(typeStep.stepId, 'SELECT_INSTANCE_TYPE', { field: 'instanceType', value: 't2.micro' });
+                             
+                             const amiStep = activeLab.steps.find(s => s.validationLogic?.field === 'ami');
+                             if (amiStep) handleAction(amiStep.stepId, 'SELECT_AMI', { field: 'ami', value: 'ami-al2023' });
                         }
 
                         toast.success('Lab defaults filled successfully');
@@ -589,7 +615,12 @@ const Ec2Dashboard = ({ activeLab }) => {
                  ].map(ami => (
                      <div 
                         key={ami.name}
-                        onClick={() => setWizardState({...wizardState, ami: ami.id})}
+                        onClick={() => {
+                          setWizardState({...wizardState, ami: ami.id});
+                          // Validate AMI selection step
+                          const step = activeLab?.steps?.find(s => s.validationLogic?.field === 'ami');
+                          if (step) handleAction(step.stepId, 'SELECT_AMI', { field: 'ami', value: ami.id });
+                        }}
                         className={`border rounded p-4 cursor-pointer flex items-start justify-between ${wizardState.ami === ami.id ? 'border-aws-blue bg-blue-50 ring-1 ring-aws-blue' : 'border-gray-200 hover:border-gray-300'}`}
                      >
                         <div className="flex items-start">
@@ -627,7 +658,10 @@ const Ec2Dashboard = ({ activeLab }) => {
                      onChange={(e) => {
                          setWizardState({...wizardState, instanceType: e.target.value});
                          const step = activeLab?.steps?.find(s => s.validationLogic?.field === 'instanceType');
-                         if (step) handleAction(step.stepId, 'SELECT_OPTION', { field: 'instanceType', value: e.target.value });
+                         if (step) {
+                           // Send SELECT_INSTANCE_TYPE action to match expected action
+                           handleAction(step.stepId, 'SELECT_INSTANCE_TYPE', { field: 'instanceType', value: e.target.value });
+                         }
                      }}
                  >
                      <option value="">Select instance type</option>
@@ -930,16 +964,107 @@ const Ec2Dashboard = ({ activeLab }) => {
              </div>
              <button 
                 className="w-full bg-aws-orange hover:bg-[#ec8900] text-white font-bold py-2 px-4 rounded shadow"
-                onClick={() => {
-                    // VALIDATION FAILURE INJECTION
-                    if (!wizardState.name) return toast.error('Instance Name is required.');
-                    if (!wizardState.ami) return toast.error('Please select an AMI.');
-                    if (!wizardState.instanceType) return toast.error('Please select an Instance Type.');
-                    if (!wizardState.vpcId) return toast.error('VPC selection is required.');
-                    if (!wizardState.subnetId) return toast.error('Subnet selection is required.');
+                onClick={async () => {
+                    // Validation checks
+                    if (!wizardState.name) {
+                      console.warn('⚠️ [EC2 Console] Validation failed: Instance Name is required');
+                      return toast.error('Instance Name is required.');
+                    }
+                    if (!wizardState.ami) {
+                      console.warn('⚠️ [EC2 Console] Validation failed: AMI is required');
+                      return toast.error('Please select an AMI.');
+                    }
+                    if (!wizardState.instanceType) {
+                      console.warn('⚠️ [EC2 Console] Validation failed: Instance Type is required');
+                      return toast.error('Please select an Instance Type.');
+                    }
+                    if (!wizardState.vpcId) {
+                      console.warn('⚠️ [EC2 Console] Validation failed: VPC is required');
+                      return toast.error('VPC selection is required.');
+                    }
+                    if (!wizardState.subnetId) {
+                      console.warn('⚠️ [EC2 Console] Validation failed: Subnet is required');
+                      return toast.error('Subnet selection is required.');
+                    }
+                    
+                    // Before launching, ensure all prerequisite steps are validated
+                    console.log('🔍 [EC2 Console] Ensuring prerequisite steps are validated...');
+                    
+                    // Validate missing steps if they have data - wait for each to complete
+                    if (activeLab?.steps) {
+                      const validationPromises = [];
+                      
+                      // Validate instance type step if not completed
+                      const instanceTypeStep = activeLab.steps.find(s => s.validationLogic?.field === 'instanceType');
+                      if (instanceTypeStep && wizardState.instanceType) {
+                        const currentState = store.getState();
+                        const currentCompletedSteps = currentState.simulation.completedSteps;
+                        if (!currentCompletedSteps.includes(instanceTypeStep.stepId)) {
+                          console.log('✅ [EC2 Console] Auto-validating instance type step before launch');
+                          validationPromises.push(
+                            dispatch(validateStep({
+                              userId,
+                              labId: activeLab.labId,
+                              stepId: instanceTypeStep.stepId,
+                              action: 'SELECT_INSTANCE_TYPE',
+                              payload: { field: 'instanceType', value: wizardState.instanceType }
+                            }))
+                          );
+                        }
+                      }
+                      
+                      // Validate AMI step if not completed
+                      const amiStep = activeLab.steps.find(s => s.validationLogic?.field === 'ami');
+                      if (amiStep && wizardState.ami) {
+                        const currentState = store.getState();
+                        const currentCompletedSteps = currentState.simulation.completedSteps;
+                        if (!currentCompletedSteps.includes(amiStep.stepId)) {
+                          console.log('✅ [EC2 Console] Auto-validating AMI step before launch');
+                          validationPromises.push(
+                            dispatch(validateStep({
+                              userId,
+                              labId: activeLab.labId,
+                              stepId: amiStep.stepId,
+                              action: 'SELECT_AMI',
+                              payload: { field: 'ami', value: wizardState.ami }
+                            }))
+                          );
+                        }
+                      }
+                      
+                      // Validate name step if not completed
+                      const nameStep = activeLab.steps.find(s => s.validationLogic?.field === 'name');
+                      if (nameStep && wizardState.name) {
+                        const currentState = store.getState();
+                        const currentCompletedSteps = currentState.simulation.completedSteps;
+                        if (!currentCompletedSteps.includes(nameStep.stepId)) {
+                          console.log('✅ [EC2 Console] Auto-validating name step before launch');
+                          validationPromises.push(
+                            dispatch(validateStep({
+                              userId,
+                              labId: activeLab.labId,
+                              stepId: nameStep.stepId,
+                              action: 'INPUT_VALUE',
+                              payload: { field: 'name', value: wizardState.name }
+                            }))
+                          );
+                        }
+                      }
+                      
+                      // Wait for all validations to complete
+                      if (validationPromises.length > 0) {
+                        console.log(`⏳ [EC2 Console] Waiting for ${validationPromises.length} step validations to complete...`);
+                        await Promise.all(validationPromises);
+                        console.log('✅ [EC2 Console] All step validations completed');
+                        // Small delay to ensure state is updated
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                      }
+                    }
                     
                     const step = activeLab?.steps?.find(s => s.validationLogic?.type === 'RESOURCE_CREATED' && s.validationLogic.resourceType === 'EC2_INSTANCE');
-                    handleAction(step?.stepId || null, 'CLICK_FINAL_LAUNCH', { 
+                    console.log('🔍 [EC2 Console] Found launch step:', step);
+                    
+                    const launchPayload = { 
                         name: wizardState.name,
                         ami: wizardState.ami,
                         instanceType: wizardState.instanceType,
@@ -949,7 +1074,10 @@ const Ec2Dashboard = ({ activeLab }) => {
                         userData: wizardState.userData,
                         keyPair: wizardState.keyPair,
                         storage: wizardState.storage
-                    });
+                    };
+                    
+                    console.log('📤 [EC2 Console] Launching instance with payload:', launchPayload);
+                    handleAction(step?.stepId || null, 'CLICK_FINAL_LAUNCH', launchPayload);
 
                 }}
              >

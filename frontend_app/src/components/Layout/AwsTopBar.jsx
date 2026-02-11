@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Bell, HelpCircle, ChevronDown, User, Search, Settings, LogOut, ArrowRight, Check, Terminal } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
+import { logout } from '../../store/authSlice';
 import toast from 'react-hot-toast';
 
 const REGIONS = [
@@ -29,6 +30,7 @@ const AwsTopBar = ({ onToggleCloudShell }) => {
     const dispatch = useDispatch();
     const { resources } = useSelector(state => state.simulation);
     const { activeLab } = useSelector(state => state.lab);
+    const { user } = useSelector(state => state.auth);
     const topBarRef = useRef(null);
 
     // ... (keep useEffect) ...
@@ -246,19 +248,30 @@ const AwsTopBar = ({ onToggleCloudShell }) => {
                         onClick={() => toggleMenu('user')}
                     >
                         <User size={18} className="mr-1" />
-                        <span className="text-sm font-bold hidden md:inline">Student</span>
+                        <span className="text-sm font-bold hidden md:inline">{user?.username || 'User'}</span>
                         <ChevronDown size={14} className="ml-1" />
                     </button>
 
                      {openMenu === 'user' && (
                         <div className="absolute top-full right-0 mt-1 w-48 bg-white text-gray-800 shadow-xl rounded border border-gray-200 py-1 z-50">
                              <div className="px-4 py-2 border-b text-xs text-gray-500">
-                                 Account ID: 1234-5678-9012
+                                 {user?.username || 'User'}
+                             </div>
+                             <div className="px-4 py-1 text-xs text-gray-400 border-b">
+                                 {user?.email}
                              </div>
                              <Link to="/settings" className="flex items-center px-4 py-2 hover:bg-gray-100 text-sm" onClick={() => setOpenMenu(null)}>
                                  <Settings size={14} className="mr-2"/> Settings
                              </Link>
-                             <div className="flex items-center px-4 py-2 hover:bg-gray-100 text-sm cursor-pointer text-red-600">
+                             <div 
+                                className="flex items-center px-4 py-2 hover:bg-gray-100 text-sm cursor-pointer text-red-600"
+                                onClick={() => {
+                                    dispatch(logout());
+                                    toast.success('Logged out successfully');
+                                    navigate('/login');
+                                    setOpenMenu(null);
+                                }}
+                             >
                                  <LogOut size={14} className="mr-2"/> Sign Out
                              </div>
                         </div>

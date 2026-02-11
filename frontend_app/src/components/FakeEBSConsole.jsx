@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { validateStep, fetchResources } from '../store/simulationSlice';
+import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 import { HardDrive, Plus, Loader, Server } from 'lucide-react';
 
 const FakeEBSConsole = () => {
     const dispatch = useDispatch();
     const { resources } = useSelector(state => state.simulation);
+    const { userId } = useAuth();
     const volumes = resources.ebsVolume || []; // Assuming backend returns type 'EBS_VOLUME' map to 'ebsVolume' key or we need to fix slice? 
     // Wait, slice maps based on raw string? 
     // In simulationSlice: "state.resources.ec2 = action.payload.filter(r => r.resourceType === 'EC2_INSTANCE')"
@@ -32,8 +34,6 @@ const FakeEBSConsole = () => {
     const [selectedVol, setSelectedVol] = useState(null);
     const [selectedInstance, setSelectedInstance] = useState('');
     const [device, setDevice] = useState('/dev/sdf');
-
-    const userId = 'user-123';
 
     useEffect(() => {
         dispatch(fetchResources({ userId, type: 'EBS_VOLUME' }));

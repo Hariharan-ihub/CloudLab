@@ -13,7 +13,9 @@ const LabSubmissionSchema = new mongoose.Schema({
     title: String,
     thumbnail: String,
     channelTitle: String,
-    url: String
+    url: String,
+    description: String,
+    relatedTo: String // Which improvement this video addresses
   }],
   submittedAt: { type: Date, default: Date.now }
 });

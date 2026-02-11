@@ -9,17 +9,22 @@ const LabDashboard = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { labs, loading, error } = useSelector((state) => state.lab);
-  const { resources } = useSelector((state) => state.simulation);
+  const { user } = useSelector(state => state.auth);
+  const userId = user?.id;
 
   useEffect(() => {
     dispatch(clearActiveLab()); // Ensure we are in "List Mode"
     dispatch(resetSimulation()); // Reset simulation progress
     dispatch(fetchLabs());
-    dispatch(fetchResources({ userId: 'user-123', type: 'EC2_INSTANCE' }));
-    dispatch(fetchResources({ userId: 'user-123', type: 'S3_BUCKET' }));
-    dispatch(fetchResources({ userId: 'user-123', type: 'VPC' }));
-    dispatch(fetchResources({ userId: 'user-123', type: 'IAM_USER' }));
-  }, [dispatch]);
+    
+    // Pre-fetch common resources for dashboard display (if user is logged in)
+    if (userId) {
+      const resourceTypes = ['EC2_INSTANCE', 'S3_BUCKET', 'VPC', 'IAM_USER'];
+      resourceTypes.forEach(type => {
+        dispatch(fetchResources({ userId, type }));
+      });
+    }
+  }, [dispatch, userId]);
 
   const getIcon = (service) => {
       switch(service) {

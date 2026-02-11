@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { validateStep, fetchResources } from '../store/simulationSlice';
+import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 import { Shield, Plus, Trash2, Edit2, X, Save } from 'lucide-react';
 
 const FakeSecurityGroupConsole = () => {
     const dispatch = useDispatch();
     const { resources } = useSelector(state => state.simulation);
+    const { userId } = useAuth();
     const securityGroups = resources.securityGroup || [];
     const instances = resources.ec2 || [];
     
@@ -20,8 +22,6 @@ const FakeSecurityGroupConsole = () => {
     // Edit State
     const [editingGroup, setEditingGroup] = useState(null);
     const [editRules, setEditRules] = useState([]); // [{ type, protocol, portRange, source }]
-
-    const userId = 'user-123';
 
     useEffect(() => {
         dispatch(fetchResources({ userId, type: 'SECURITY_GROUP' }));

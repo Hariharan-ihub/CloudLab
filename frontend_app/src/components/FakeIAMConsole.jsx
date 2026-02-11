@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { validateStep, fetchResources } from '../store/simulationSlice';
+import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 import { Shield, Plus, Copy, FileText, ChevronRight, Trash2, Search, ExternalLink, Key, Lock, Archive } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
@@ -9,6 +10,7 @@ const FakeIAMConsole = () => {
     const dispatch = useDispatch();
     const { resources } = useSelector(state => state.simulation);
     const { activeLab } = useSelector(state => state.lab);
+    const { userId } = useAuth();
     const users = resources.iam || [];
     const roles = resources.iamRoles || [];
     const policies = resources.iamPolicies || [];
@@ -53,14 +55,13 @@ const FakeIAMConsole = () => {
     // -- Delete Confirmation State --
     const [deleteConfirm, setDeleteConfirm] = useState({ show: false, type: null, name: null });
 
-    const userId = 'user-123';
-
     useEffect(() => {
+        if (!userId) return;
         dispatch(fetchResources({ userId, type: 'IAM_USER' }));
         dispatch(fetchResources({ userId, type: 'IAM_ROLE' }));
         dispatch(fetchResources({ userId, type: 'IAM_POLICY' }));
         dispatch(fetchResources({ userId, type: 'IAM_GROUP' }));
-    }, [dispatch]);
+    }, [dispatch, userId]);
 
     const handleCreateUserSubmit = async () => {
         if(!createUserState.userName) {
