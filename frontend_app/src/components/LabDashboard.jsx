@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { fetchLabs, clearActiveLab } from '../store/labSlice';
 import { fetchResources, resetSimulation } from '../store/simulationSlice';
 import { useNavigate } from 'react-router-dom';
-import { Clock, BarChart, Server, Database, Shield, PlayCircle } from 'lucide-react';
+import { Clock, BarChart, Server, Database, Shield, PlayCircle, Network } from 'lucide-react';
 
 const LabDashboard = () => {
   const dispatch = useDispatch();
@@ -26,6 +26,7 @@ const LabDashboard = () => {
           case 'EC2': return <Server className="text-orange-500" size={32} />;
           case 'S3': return <Database className="text-green-500" size={32} />;
           case 'IAM': return <Shield className="text-red-500" size={32} />;
+          case 'VPC': return <Network className="text-purple-500" size={32} />;
           default: return <Server className="text-gray-500" size={32} />;
       }
   };
@@ -35,12 +36,23 @@ const LabDashboard = () => {
           case 'EC2': return 'border-orange-500';
           case 'S3': return 'border-green-500';
           case 'IAM': return 'border-red-500';
+          case 'VPC': return 'border-purple-500';
           default: return 'border-gray-300';
       }
   };
 
   if (loading) return <div className="p-10 text-center animate-pulse">Loading Training Catalog...</div>;
-  if (error) return <div className="p-10 text-center text-red-500">Error: {error}</div>;
+  if (error) return (
+    <div className="p-10 text-center">
+        <div className="text-red-500 mb-4">Error: {error}</div>
+        <button 
+            onClick={() => dispatch(fetchLabs())}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+        >
+            Retry
+        </button>
+    </div>
+  );
 
   return (
     <div className="p-8 max-w-7xl mx-auto min-h-screen">
@@ -50,7 +62,7 @@ const LabDashboard = () => {
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {labs.filter(lab => lab.title !== 'Build a Secure VPC Network').map((lab) => (
+        {labs.map((lab) => (
           <div 
             key={lab.labId} 
             className={`bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border-t-4 ${getColor(lab.service)} group h-full flex flex-col`}

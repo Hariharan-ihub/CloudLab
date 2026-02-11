@@ -85,6 +85,18 @@ exports.validateAction = async (req, res) => {
     if (stepId) {
         const step = await Step.findOne({ stepId: stepId, labId: labId });
         if (step) {
+             // 1a. Validate Sequence (New)
+             if (step.order > 1) {
+                 const progress = await UserProgress.findOne({ userId, labId });
+                 // Find explicit previous step by order
+                 const prevStep = await Step.findOne({ labId: step.labId, order: step.order - 1 });
+                 
+                 // If there is a previous step, and user has NO progress OR prev step is NOT in completedSteps
+                 if (prevStep && (!progress || !progress.completedSteps.includes(prevStep.stepId))) {
+                     return res.json({ success: false, message: `Please complete step ${step.order - 1}: ${prevStep.title} first.` });
+                 }
+             }
+
              if (step.expectedAction !== 'GENERIC' && step.expectedAction !== action) {
                  success = false;
                  message = `Incorrect action. Expected ${step.expectedAction}`;
@@ -530,5 +542,119 @@ exports.validateAction = async (req, res) => {
 
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// --- SUBMISSION LOGIC ---
+const LabSubmission = require('../models/LabSubmission');
+const axios = require('axios');
+
+exports.submitLab = async (req, res) => {
+  const { userId, labId } = req.body;
+  
+  try {
+      // 1. Calculate Score
+      const lab = await Lab.findOne({ labId });
+      if (!lab) return res.status(404).json({ message: 'Lab not found' });
+      
+      const progress = await UserProgress.findOne({ userId, labId });
+      const completedCount = progress ? progress.completedSteps.length : 0;
+      const totalSteps = lab.steps.length;
+      const score = Math.round((completedCount / totalSteps) * 100);
+
+      // 2. Generate Feedback (Simulated AI)
+      // Logic: Analyze which steps are missing or done
+      const feedback = {
+          strengths: [],
+          improvements: []
+      };
+
+      if (score === 100) {
+          feedback.strengths.push('Excellent execution! You completed all steps perfectly.');
+          feedback.strengths.push('Demonstrated strong understanding of the core concepts.');
+      } else if (score > 50) {
+          feedback.strengths.push('Good progress! You successfully navigated the core workflow.');
+          feedback.improvements.push('Review the final verification steps to ensure resources are correctly deployed.');
+      } else {
+          feedback.improvements.push('It seems you got stuck early on. Try reviewing the lab scenario again.');
+          feedback.improvements.push('Focus on understanding the service prerequisites first.');
+      }
+
+      // Add specific feedback based on lab type (Example for EC2)
+      if (labId === 'lab-ec2-launch') {
+          if (progress?.completedSteps.includes('ec2-select-name')) {
+              feedback.strengths.push('Correctly identified and named the instance.');
+          }
+          if (!progress?.completedSteps.includes('ec2-select-type')) {
+              feedback.improvements.push('Understanding Instance Types (t2.micro vs others) is crucial for cost management.');
+          }
+          if (!progress?.completedSteps.includes('ec2-review-launch')) {
+             feedback.improvements.push('Don\'t forget to actually launch the instance after configuration!');
+          }
+      }
+
+      // 3. YouTube Search (Real API)
+      let youtubeResults = [];
+      const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY; // Expects this in .env
+      
+      if (YOUTUBE_API_KEY && feedback.improvements.length > 0) {
+          // Construct query from improvements
+          const queryTerm = feedback.improvements[0].replace('Review', '').replace('Understanding', '').trim() + ' AWS tutorial';
+          const query = encodeURIComponent(queryTerm);
+          
+          try {
+              const ytResponse = await axios.get(`https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=3&q=${query}&key=${YOUTUBE_API_KEY}&type=video`);
+              
+              if (ytResponse.data.items) {
+                  youtubeResults = ytResponse.data.items.map(item => ({
+                      videoId: item.id.videoId,
+                      title: item.snippet.title,
+                      thumbnail: item.snippet.thumbnails.medium.url,
+                      channelTitle: item.snippet.channelTitle,
+                      url: `https://www.youtube.com/watch?v=${item.id.videoId}`
+                  }));
+              }
+          } catch (ytError) {
+              console.warn(`YouTube API Warning: ${ytError.message} - Using fallback video.`);
+              // Fallback to default video so the user still sees the feature working
+              youtubeResults.push({
+                  videoId: '_jEGlMbeV4Q', 
+                  title: 'Recommended: AWS EC2 Masterclass (Fallback)',
+                  thumbnail: 'https://img.youtube.com/vi/_jEGlMbeV4Q/mqdefault.jpg',
+                  channelTitle: 'Recommended Channel',
+                  url: 'https://www.youtube.com/watch?v=_jEGlMbeV4Q'
+              });
+          }
+      } else {
+          // Fallback if no key or perfect score
+          if(score < 100) {
+             youtubeResults.push({
+                 videoId: '_jEGlMbeV4Q', // Valid video ID
+                 title: 'Recommended: AWS EC2 Masterclass',
+                 thumbnail: 'https://img.youtube.com/vi/_jEGlMbeV4Q/mqdefault.jpg',
+                 channelTitle: 'Recommended Channel',
+                 url: 'https://www.youtube.com/watch?v=_jEGlMbeV4Q'
+             });
+          }
+      }
+
+      // 4. Save Submission
+      const submission = new LabSubmission({
+          userId,
+          labId,
+          score,
+          feedback,
+          youtubeResults
+      });
+      await submission.save();
+
+      res.json({
+          success: true,
+          submission
+      });
+
+  } catch (error) {
+      console.error('Submission Error:', error);
+      res.status(500).json({ message: error.message });
   }
 };

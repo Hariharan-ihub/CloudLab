@@ -22,8 +22,7 @@ const Ec2Dashboard = ({ activeLab }) => {
     userData: '',
     keyPair: '',
     storage: { size: 8, type: 'gp3' },
-    keyPair: '',
-    storage: { size: 8, type: 'gp3' },
+
     sgMode: 'create',
     publicIp: true, // Network Settings Toggle
     sgRules: { ssh: true, http: false, https: false } // Checkbox state
@@ -68,11 +67,11 @@ const Ec2Dashboard = ({ activeLab }) => {
   useEffect(() => {
      if (activeLab?.steps) {
          const navStep = activeLab.steps.find(s => s.validationLogic?.type === 'URL_CONTAINS' && s.validationLogic.value === '/service/ec2');
-         if (navStep) {
+         if (navStep && !completedSteps.includes(navStep.stepId)) {
              handleAction(navStep.stepId, 'NAVIGATE', { url: '/service/ec2' });
          }
      }
-  }, [activeLab, dispatch]);
+  }, [activeLab, dispatch, completedSteps]);
 
   // Restore Wizard state on Resume
   useEffect(() => {

@@ -1,13 +1,29 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 
 export const fetchLabs = createAsyncThunk('labs/fetchLabs', async () => {
-  const response = await fetch('http://localhost:5000/api/labs');
-  if (!response.ok) throw new Error('Failed to fetch labs');
-  return response.json();
+  try {
+    console.log('Fetching labs from /api/labs...');
+    const response = await fetch('/api/labs');
+    console.log('Response status:', response.status);
+    console.log('Response type:', response.headers.get('content-type'));
+    
+    if (!response.ok) {
+        const text = await response.text();
+        console.error('Fetch failed:', text);
+        throw new Error(`Failed to fetch labs: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    console.log('Labs data:', data);
+    return data;
+  } catch (err) {
+    console.error('Fetch error details:', err);
+    throw err;
+  }
 });
 
 export const fetchLabById = createAsyncThunk('labs/fetchLabById', async (labId) => {
-  const response = await fetch(`http://localhost:5000/api/labs/${labId}`);
+  const response = await fetch(`/api/labs/${labId}`);
   if (!response.ok) throw new Error('Failed to fetch lab');
   return response.json();
 });

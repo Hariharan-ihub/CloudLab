@@ -1,11 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { CheckCircle, AlertCircle, PlayCircle, Info } from 'lucide-react';
 import { submitLab, setCurrentStep } from '../store/simulationSlice';
+import ConfirmationModal from './ConfirmationModal';
 
 const LabStepPanel = ({ lab, currentStepId }) => {
-  const { completedSteps, validationStatus, lastMessage, isSubmitted } = useSelector((state) => state.simulation);
+  const { completedSteps, validationStatus, lastMessage, isSubmitted, lastValidatedStepId, submissionStatus } = useSelector((state) => state.simulation);
   const dispatch = useDispatch();
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   
   // Find current step index
   const currentStepIndex = lab.steps.findIndex(s => s.stepId === currentStepId);
@@ -22,11 +24,14 @@ const LabStepPanel = ({ lab, currentStepId }) => {
     }
   }, [completedSteps, currentStepId, lab.steps, dispatch]);
 
+  const handleSubmitClick = () => {
+      setShowSubmitConfirm(true);
+  };
 
-
-  const handleSubmit = () => {
-      const calculatedScore = Math.round((completedSteps.length / lab.steps.length) * 100);
-      dispatch(submitLab(calculatedScore));
+  const handleConfirmSubmit = () => {
+      setShowSubmitConfirm(false);
+      // submitLab is now an async thunk, pass userId and labId
+      dispatch(submitLab({ userId: 'user-123', labId: lab.labId })); 
   };
 
   return (
@@ -91,13 +96,13 @@ const LabStepPanel = ({ lab, currentStepId }) => {
                             {step.instruction}
                         </div>
 
-                        {isCurrent && validationStatus === 'error' && (
+                        {isCurrent && validationStatus === 'error' && (lastValidatedStepId === step.stepId || !lastValidatedStepId) && (
                             <div className="mt-2 text-xs bg-red-50 text-red-700 p-2 rounded border border-red-200 flex items-start">
                                 <AlertCircle size={14} className="mr-1 mt-0.5 flex-shrink-0" />
                                 <span>{lastMessage}</span>
                             </div>
                         )}
-                         {isCurrent && validationStatus === 'success' && (
+                         {isCurrent && validationStatus === 'success' && (lastValidatedStepId === step.stepId) && (
                             <div className="mt-2 text-xs bg-green-50 text-green-700 p-2 rounded border border-green-200 flex items-start animate-fade-in-up">
                                 <CheckCircle size={14} className="mr-1 mt-0.5 flex-shrink-0" />
                                 <span>{lastMessage}</span>
@@ -111,17 +116,26 @@ const LabStepPanel = ({ lab, currentStepId }) => {
         {/* Submit Area */}
         <div className="p-4 border-t border-gray-200 bg-gray-50">
             <button 
-                onClick={handleSubmit}
-                disabled={isSubmitted}
+                onClick={handleSubmitClick}
+                disabled={isSubmitted || submissionStatus === 'submitting'}
                 className={`w-full py-2 font-bold rounded shadow transition-colors ${
-                  isSubmitted 
+                  isSubmitted || submissionStatus === 'submitting'
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
                   : 'bg-aws-orange text-white hover:bg-orange-600'
                 }`}
             >
-                {isSubmitted ? 'Submitted' : 'Submit Lab'}
+                {submissionStatus === 'submitting' ? 'Submitting...' : isSubmitted ? 'Submitted' : 'Submit Lab'}
             </button>
         </div>
+
+        <ConfirmationModal
+            isOpen={showSubmitConfirm}
+            title="Submit Lab?"
+            message="Are you sure you want to submit? This will end your session and generate your learning feedback."
+            onConfirm={handleConfirmSubmit}
+            onCancel={() => setShowSubmitConfirm(false)}
+            confirmText="Submit & Finish"
+        />
     </div>
   );
 };

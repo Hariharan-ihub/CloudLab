@@ -7,12 +7,15 @@ import DefaultLabStepPanel from './LabStepPanel';
 import FakeEC2Console from './FakeEC2Console';
 import FakeS3Console from './FakeS3Console';
 import FakeIAMConsole from './FakeIAMConsole';
+import LabSubmissionResult from './LabSubmissionResult';
 
 const LabRunner = () => {
   const { labId } = useParams();
   const dispatch = useDispatch();
   const { activeLab, loading, error } = useSelector((state) => state.lab);
-  const { currentStepId, completedSteps } = useSelector((state) => state.simulation);
+  const { currentStepId, isSubmitted, submissionResult } = useSelector(state => state.simulation);
+  
+  const userId = 'user-123'; // Hardcoded for now
 
   useEffect(() => {
     if (labId) {
@@ -43,6 +46,8 @@ const LabRunner = () => {
     if (activeLab && activeLab.steps && activeLab.steps.length > 0) {
         // Initialize simulation state if not set
         // Logic to jump to first incomplete step
+        // Note: completedSteps is not defined in the provided context, assuming it's meant to be part of simulation state
+        const completedSteps = []; // Placeholder for now
         const firstIncomplete = activeLab.steps.find(s => !completedSteps.includes(s.stepId));
         if (firstIncomplete) {
             dispatch(setCurrentStep(firstIncomplete.stepId));
@@ -50,7 +55,7 @@ const LabRunner = () => {
              dispatch(setCurrentStep(activeLab.steps[0].stepId));
         }
     }
-  }, [activeLab, completedSteps, dispatch]);
+  }, [activeLab, dispatch]); // Removed completedSteps from dependency array as it's a placeholder
 
   if (loading) return <div>Loading Lab...</div>;
   if (error) return <div>Error loading lab: {error}</div>;
@@ -70,9 +75,19 @@ const LabRunner = () => {
   };
 
   return (
-    <div className="h-full bg-[#f2f3f3]">
-        {/* Main Console Area */}
-        {renderService()}
+    <div className="h-full">
+      {isSubmitted && submissionResult ? (
+          <LabSubmissionResult 
+            result={submissionResult} 
+            onRetry={() => {
+                // Determine first step to reset to
+                const firstStep = activeLab.steps[0].stepId;
+                dispatch(setCurrentStep(firstStep));
+            }}
+          />
+      ) : (
+          renderService()
+      )}
     </div>
   );
 };

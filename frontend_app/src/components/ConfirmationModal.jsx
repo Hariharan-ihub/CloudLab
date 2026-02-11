@@ -1,46 +1,46 @@
 import React from 'react';
-import { AlertCircle, X } from 'lucide-react';
 
-const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Confirm', confirmStyle = 'danger' }) => {
+const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Confirm', type = 'info' }) => {
   if (!isOpen) return null;
 
+  const isDanger = type === 'danger';
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-in fade-in duration-200" onClick={onCancel}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 overflow-hidden border border-gray-200 transform scale-100 transition-transform" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 animate-fade-in">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full overflow-hidden transform transition-all scale-100">
+        
         {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-gray-50">
-          <h3 className="text-lg font-bold text-gray-800 flex items-center">
-            {confirmStyle === 'danger' && <AlertCircle className="text-red-500 mr-2" size={20} />}
-            {title}
-          </h3>
-          <button onClick={onCancel} className="text-gray-500 hover:text-gray-700">
-            <X size={20} />
-          </button>
+        <div className={`px-6 py-4 border-b ${isDanger ? 'bg-red-50 border-red-100' : 'bg-gray-50 border-gray-100'}`}>
+            <h3 className={`text-lg font-bold ${isDanger ? 'text-red-700' : 'text-gray-800'}`}>
+                {title}
+            </h3>
         </div>
 
-        {/* Content */}
+        {/* Body */}
         <div className="p-6">
-          <p className="text-gray-600">
-            {message}
-          </p>
+            <p className="text-gray-600 leading-relaxed">
+                {message}
+            </p>
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end space-x-3 p-4 bg-gray-50 border-t border-gray-100">
-          <button 
-            onClick={onCancel}
-            className="px-4 py-2 bg-white border border-gray-300 rounded text-gray-700 hover:bg-gray-50 font-medium text-sm"
-          >
-            Cancel
-          </button>
-          <button 
-            onClick={onConfirm}
-            className={`px-4 py-2 rounded text-white font-bold text-sm shadow-sm ${
-              confirmStyle === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-aws-blue hover:bg-[#232f3e]'
-            }`}
-          >
-            {confirmText}
-          </button>
+        <div className="px-6 py-4 bg-gray-50 border-t flex justify-end space-x-3">
+            <button 
+                onClick={onCancel}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-aws-blue"
+            >
+                Cancel
+            </button>
+            <button 
+                onClick={onConfirm}
+                className={`px-4 py-2 text-sm font-bold text-white rounded focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                    isDanger 
+                    ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500' 
+                    : 'bg-aws-orange hover:bg-orange-600 focus:ring-orange-500'
+                }`}
+            >
+                {confirmText}
+            </button>
         </div>
       </div>
     </div>

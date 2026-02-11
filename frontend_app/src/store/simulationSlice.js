@@ -4,7 +4,7 @@ export const validateStep = createAsyncThunk(
   'simulation/validateStep',
   async ({ userId, labId, stepId, action, payload }, { rejectWithValue }) => {
     try {
-      const response = await fetch('http://localhost:5000/api/simulation/validate', {
+      const response = await fetch('/api/simulation/validate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -27,7 +27,7 @@ export const startLab = createAsyncThunk(
   'simulation/startLab',
   async ({ userId, labId }, { rejectWithValue }) => {
     try {
-      const response = await fetch('http://localhost:5000/api/simulation/start', {
+      const response = await fetch('/api/simulation/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -50,11 +50,34 @@ export const fetchResources = createAsyncThunk(
   'simulation/fetchResources',
   async ({ userId, type }, { rejectWithValue }) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/simulation/resources?userId=${userId}&type=${type}`);
+      const response = await fetch(`/api/simulation/resources?userId=${userId}&type=${type}`);
       if (!response.ok) throw new Error('Failed to fetch resources');
       return await response.json();
     } catch (error) {
       return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const submitLab = createAsyncThunk(
+  'simulation/submitLab',
+  async ({ userId, labId }, { rejectWithValue }) => {
+    try {
+      const response = await fetch('/api/simulation/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId, labId }),
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        return rejectWithValue(data);
+      }
+      return data.submission;
+    } catch (error) {
+      return rejectWithValue({ message: error.message });
     }
   }
 );
@@ -66,7 +89,13 @@ const simulationSlice = createSlice({
     completedSteps: [],
     validationStatus: 'idle', // idle | validating | success | error
     lastMessage: '',
+    lastValidatedStepId: null,
+    
+    // Submission State
     isSubmitted: false,
+    submissionStatus: 'idle', // idle | submitting | success | error
+    submissionResult: null,   // Holds the feedback & youtube links
+    
     finalScore: 0,
     resources: { // Centralized resource store
         ec2: [],
@@ -87,10 +116,7 @@ const simulationSlice = createSlice({
       state.currentStepId = action.payload;
       state.validationStatus = 'idle';
       state.lastMessage = '';
-    },
-    submitLab: (state, action) => {
-      state.isSubmitted = true;
-      state.finalScore = action.payload;
+      state.lastValidatedStepId = null;
     },
     resetSimulation: (state) => {
       state.currentStepId = null;
@@ -99,6 +125,9 @@ const simulationSlice = createSlice({
       state.lastMessage = '';
       state.isSubmitted = false;
       state.finalScore = 0;
+      state.lastValidatedStepId = null;
+      state.submissionStatus = 'idle';
+      state.submissionResult = null;
     }
   },
   extraReducers: (builder) => {
@@ -107,8 +136,23 @@ const simulationSlice = createSlice({
          // Reset state on start
          state.isSubmitted = false;
          state.completedSteps = [];
+         state.submissionStatus = 'idle';
+         state.submissionResult = null;
          // Clear resources so we fetch fresh ones
          state.resources = { ec2: [], s3: [], iam: [], iamRoles: [], iamPolicies: [], iamGroups: [], vpc: [], subnet: [], securityGroup: [], secrets: [], logGroups: [] };
+      })
+      .addCase(submitLab.pending, (state) => {
+          state.submissionStatus = 'submitting';
+      })
+      .addCase(submitLab.fulfilled, (state, action) => {
+          state.submissionStatus = 'success';
+          state.isSubmitted = true;
+          state.submissionResult = action.payload;
+          state.finalScore = action.payload.score;
+      })
+      .addCase(submitLab.rejected, (state, action) => {
+          state.submissionStatus = 'error';
+          state.lastMessage = action.payload?.message || 'Submission failed';
       })
       .addCase(fetchResources.fulfilled, (state, action) => {
           const type = action.meta.arg.type;
@@ -144,6 +188,7 @@ const simulationSlice = createSlice({
       .addCase(validateStep.fulfilled, (state, action) => {
         const { success, message, stepId } = action.payload; 
         state.lastMessage = message;
+        state.lastValidatedStepId = stepId;
         if (success) {
           state.validationStatus = 'success';
           if (stepId && !state.completedSteps.includes(stepId)) {
@@ -160,5 +205,5 @@ const simulationSlice = createSlice({
   },
 });
 
-export const { setCurrentStep, resetSimulation, submitLab } = simulationSlice.actions;
+export const { setCurrentStep, resetSimulation } = simulationSlice.actions;
 export default simulationSlice.reducer;
