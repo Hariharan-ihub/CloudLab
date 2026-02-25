@@ -40,10 +40,12 @@ mongoose.connect(MONGODB_URI)
 const labRoutes = require('./routes/labRoutes');
 const simulationRoutes = require('./routes/simulationRoutes');
 const authRoutes = require('./routes/authRoutes');
+const resourceHistoryRoutes = require('./routes/resourceHistoryRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/labs', labRoutes);
 app.use('/api/simulation', simulationRoutes);
+app.use('/api/resource-history', resourceHistoryRoutes);
 
 app.get('/', (req, res) => {
   res.send('AWS Learning Lab API is running');

@@ -75,7 +75,7 @@ export const startLab = createAsyncThunk(
 
 export const fetchResources = createAsyncThunk(
   'simulation/fetchResources',
-  async ({ userId, type }, { rejectWithValue }) => {
+  async ({ userId, type, labId = null }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
       const headers = {};
@@ -84,7 +84,12 @@ export const fetchResources = createAsyncThunk(
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      const response = await fetch(`/api/simulation/resources?userId=${userId}&type=${type}`, {
+      // Include labId in query if provided, otherwise get all user resources
+      const url = labId 
+        ? `/api/simulation/resources?userId=${userId}&type=${type}&labId=${labId}`
+        : `/api/simulation/resources?userId=${userId}&type=${type}`;
+      
+      const response = await fetch(url, {
         headers
       });
       if (!response.ok) throw new Error('Failed to fetch resources');
@@ -126,6 +131,111 @@ export const submitLab = createAsyncThunk(
   }
 );
 
+// Load user progress and resources
+export const loadUserProgress = createAsyncThunk(
+  'simulation/loadUserProgress',
+  async ({ userId, labId = null }, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = {};
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const url = labId 
+        ? `/api/simulation/progress?userId=${userId}&labId=${labId}`
+        : `/api/simulation/progress?userId=${userId}`;
+      
+      const response = await fetch(url, { headers });
+      
+      if (!response.ok) {
+        throw new Error('Failed to load user progress');
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      return rejectWithValue({ message: error.message });
+    }
+  }
+);
+
+// Save resource history
+export const saveResourceHistory = createAsyncThunk(
+  'simulation/saveResourceHistory',
+  async ({ userId, labId, resourceType, resourceData, resourceId, stepId }, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch('/api/resource-history/save', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          userId,
+          labId: labId || null,
+          resourceType,
+          resourceData,
+          resourceId: resourceId || null,
+          stepId: stepId || null
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to save resource history');
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      return rejectWithValue({ message: error.message });
+    }
+  }
+);
+
+// Get resource history
+export const getResourceHistory = createAsyncThunk(
+  'simulation/getResourceHistory',
+  async ({ userId, labId = null, resourceType = null, service = null }, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = {};
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      let url;
+      if (service) {
+        url = `/api/resource-history/service?userId=${userId}&service=${service}`;
+      } else {
+        const params = new URLSearchParams({ userId });
+        if (labId) params.append('labId', labId);
+        if (resourceType) params.append('resourceType', resourceType);
+        url = `/api/resource-history/history?${params.toString()}`;
+      }
+      
+      const response = await fetch(url, { headers });
+      
+      if (!response.ok) {
+        throw new Error('Failed to get resource history');
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      return rejectWithValue({ message: error.message });
+    }
+  }
+);
+
 const simulationSlice = createSlice({
   name: 'simulation',
   initialState: {
@@ -153,7 +263,17 @@ const simulationSlice = createSlice({
         secrets: [],
         logGroups: [],
         iamGroups: []
-    }
+    },
+    
+    // User Progress State
+    userProgress: null,
+    progressLoading: false,
+    progressError: null,
+    
+    // Resource History State
+    resourceHistory: null,
+    historyLoading: false,
+    historyError: null
   },
   reducers: {
     setCurrentStep: (state, action) => {
@@ -251,6 +371,97 @@ const simulationSlice = createSlice({
         console.error('❌ [Redux] validateStep.rejected:', action.payload);
         state.validationStatus = 'error';
         state.lastMessage = action.payload?.message || 'Validation failed';
+      })
+      .addCase(loadUserProgress.pending, (state) => {
+        state.progressLoading = true;
+        state.progressError = null;
+      })
+      .addCase(loadUserProgress.fulfilled, (state, action) => {
+        state.progressLoading = false;
+        state.userProgress = action.payload;
+        
+        // Restore completed steps if progress exists
+        if (action.payload.progress) {
+          const progress = action.payload.progress;
+          if (typeof progress === 'object' && !Array.isArray(progress)) {
+            // Single lab progress
+            if (progress.completedSteps) {
+              state.completedSteps = progress.completedSteps;
+            }
+            if (progress.currentStep) {
+              state.currentStepId = progress.currentStep;
+            }
+          } else if (typeof progress === 'object' && Object.keys(progress).length > 0) {
+            // Multiple labs progress - use the first one or current lab
+            const firstLabProgress = Object.values(progress)[0];
+            if (firstLabProgress && firstLabProgress.completedSteps) {
+              state.completedSteps = firstLabProgress.completedSteps;
+            }
+            if (firstLabProgress && firstLabProgress.currentStep) {
+              state.currentStepId = firstLabProgress.currentStep;
+            }
+          }
+        }
+        
+        // Restore resources if available
+        if (action.payload.resources) {
+          const resources = action.payload.resources;
+          Object.keys(resources).forEach(resourceType => {
+            const typeKey = resourceType.toLowerCase().replace(/_/g, '');
+            if (typeKey === 'ec2instance') {
+              state.resources.ec2 = resources[resourceType];
+            } else if (typeKey === 's3bucket') {
+              state.resources.s3 = resources[resourceType];
+            } else if (typeKey === 'iamuser') {
+              state.resources.iam = resources[resourceType];
+            } else if (typeKey === 'iamrole') {
+              state.resources.iamRoles = resources[resourceType];
+            } else if (typeKey === 'iampolicy') {
+              state.resources.iamPolicies = resources[resourceType];
+            } else if (typeKey === 'iamgroup') {
+              state.resources.iamGroups = resources[resourceType];
+            } else if (typeKey === 'vpc') {
+              state.resources.vpc = resources[resourceType];
+            } else if (typeKey === 'subnet') {
+              state.resources.subnet = resources[resourceType];
+            } else if (typeKey === 'securitygroup') {
+              state.resources.securityGroup = resources[resourceType];
+            } else if (typeKey === 'secretsmanagersecret') {
+              state.resources.secrets = resources[resourceType];
+            } else if (typeKey === 'cloudwatchloggroup') {
+              state.resources.logGroups = resources[resourceType];
+            } else if (typeKey === 'ebsvolume') {
+              state.resources.ebs = resources[resourceType] || [];
+            }
+          });
+        }
+      })
+      .addCase(loadUserProgress.rejected, (state, action) => {
+        state.progressLoading = false;
+        state.progressError = action.payload?.message || 'Failed to load progress';
+      })
+      .addCase(saveResourceHistory.pending, (state) => {
+        // Silent - don't show loading state for history saves
+      })
+      .addCase(saveResourceHistory.fulfilled, (state, action) => {
+        // History saved successfully (silent success)
+      })
+      .addCase(saveResourceHistory.rejected, (state, action) => {
+        // Silent failure - history is supplementary
+        console.warn('Failed to save resource history:', action.payload?.message);
+      })
+      .addCase(getResourceHistory.pending, (state) => {
+        state.historyLoading = true;
+        state.historyError = null;
+      })
+      .addCase(getResourceHistory.fulfilled, (state, action) => {
+        state.historyLoading = false;
+        state.resourceHistory = action.payload;
+        state.historyError = null;
+      })
+      .addCase(getResourceHistory.rejected, (state, action) => {
+        state.historyLoading = false;
+        state.historyError = action.payload?.message || 'Failed to load resource history';
       });
   },
 });

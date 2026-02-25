@@ -8,5 +8,6 @@ router.post('/submit', simulationController.submitLab);
 router.get('/resources', simulationController.getResources);
 router.get('/submission/:submissionId', simulationController.getSubmission);
 router.get('/submission', simulationController.getUserSubmission);
+router.get('/progress', simulationController.getUserProgress);
 
 module.exports = router;

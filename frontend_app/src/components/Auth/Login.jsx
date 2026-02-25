@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, Link } from 'react-router-dom';
 import { login, clearError } from '../../store/authSlice';
+import { loadUserProgress } from '../../store/simulationSlice';
 import toast from 'react-hot-toast';
 import { LogIn, Mail, Lock, Loader } from 'lucide-react';
 
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { loading, error, isAuthenticated } = useSelector((state) => state.auth);
+  const { loading, error, isAuthenticated, user } = useSelector((state) => state.auth);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -47,6 +48,21 @@ const Login = () => {
     
     if (login.fulfilled.match(result)) {
       toast.success('Login successful!');
+      
+      // Load user progress after successful login
+      const userId = result.payload.user?.id;
+      if (userId) {
+        console.log('Loading user progress after login...');
+        dispatch(loadUserProgress({ userId })).then((progressResult) => {
+          if (progressResult.payload?.progress) {
+            const progressCount = Object.keys(progressResult.payload.progress).length;
+            if (progressCount > 0) {
+              toast.success(`Welcome back! You have ${progressCount} lab(s) in progress.`);
+            }
+          }
+        });
+      }
+      
       navigate('/');
     }
   };

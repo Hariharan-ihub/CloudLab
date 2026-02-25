@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchLabById } from '../store/labSlice';
-import { setCurrentStep, startLab, fetchResources } from '../store/simulationSlice';
+import { setCurrentStep, startLab, fetchResources, loadUserProgress } from '../store/simulationSlice';
 import { USER_ID } from '../constants/user';
 import FakeEC2Console from './FakeEC2Console';
 import FakeS3Console from './FakeS3Console';
@@ -13,39 +13,82 @@ const LabRunner = () => {
   const { labId } = useParams();
   const dispatch = useDispatch();
   const { activeLab, loading, error } = useSelector((state) => state.lab);
-  const { isSubmitted, submissionResult, completedSteps } = useSelector(state => state.simulation);
+  const { isSubmitted, submissionResult, completedSteps, userProgress } = useSelector(state => state.simulation);
   const { user } = useSelector(state => state.auth);
   const userId = user?.id;
+  const [hasCheckedProgress, setHasCheckedProgress] = useState(false);
 
   useEffect(() => {
-    if (labId) {
+    if (labId && userId) {
       if (!userId) {
         console.warn('No user ID available');
         return;
       }
 
-      // Logic: If activeLab matches current URL, assume "Resume Session" and SKIP Reset.
-      if (activeLab && activeLab.labId === labId) {
-           console.log('Resuming existing session for:', labId);
-           // Just refresh resources to sync with Backend
-           const resourceTypes = ['VPC', 'SUBNET', 'SECURITY_GROUP', 'EC2_INSTANCE'];
-           resourceTypes.forEach(type => {
-             dispatch(fetchResources({ userId, type }));
-           });
+      // First, check if user has existing progress for this lab
+      if (!hasCheckedProgress) {
+        console.log('Checking for existing progress for lab:', labId);
+        dispatch(loadUserProgress({ userId, labId })).then((result) => {
+          setHasCheckedProgress(true);
+          
+          const progress = result.payload?.progress;
+          const resourcesCount = result.payload?.resourcesCount || 0;
+          
+          // Check if there's existing progress (either progress record or resources)
+          const hasExistingProgress = progress && (
+            (progress.completedSteps && progress.completedSteps.length > 0) ||
+            progress.currentStep ||
+            resourcesCount > 0
+          );
+          
+          if (hasExistingProgress) {
+            console.log('✅ Found existing progress, resuming session');
+            console.log('Progress:', progress);
+            console.log('Resources count:', resourcesCount);
+            // Load the lab data
+            dispatch(fetchLabById(labId));
+            // Resources are already loaded by loadUserProgress
+            // Just fetch any missing resource types to ensure sync
+            const resourceTypes = ['VPC', 'SUBNET', 'SECURITY_GROUP', 'EC2_INSTANCE', 'S3_BUCKET', 'IAM_USER', 'IAM_ROLE', 'IAM_POLICY', 'IAM_GROUP', 'EBS_VOLUME', 'SECRETS_MANAGER_SECRET', 'CLOUDWATCH_LOG_GROUP'];
+            resourceTypes.forEach(type => {
+              dispatch(fetchResources({ userId, type, labId }));
+            });
+          } else {
+            console.log('No existing progress, starting new lab');
+            // Start new lab session
+            dispatch(fetchLabById(labId));
+            dispatch(startLab({ userId, labId })).then(() => {
+              const resourceTypes = ['VPC', 'SUBNET', 'SECURITY_GROUP', 'EC2_INSTANCE', 'S3_BUCKET', 'IAM_USER', 'IAM_ROLE', 'IAM_POLICY', 'IAM_GROUP', 'EBS_VOLUME', 'SECRETS_MANAGER_SECRET', 'CLOUDWATCH_LOG_GROUP'];
+              resourceTypes.forEach(type => {
+                dispatch(fetchResources({ userId, type, labId }));
+              });
+            });
+          }
+        }).catch((error) => {
+          console.error('Error loading progress:', error);
+          setHasCheckedProgress(true);
+          // On error, start new lab
+          dispatch(fetchLabById(labId));
+          dispatch(startLab({ userId, labId })).then(() => {
+            const resourceTypes = ['VPC', 'SUBNET', 'SECURITY_GROUP', 'EC2_INSTANCE', 'S3_BUCKET', 'IAM_USER', 'IAM_ROLE', 'IAM_POLICY', 'IAM_GROUP', 'EBS_VOLUME', 'SECRETS_MANAGER_SECRET', 'CLOUDWATCH_LOG_GROUP'];
+            resourceTypes.forEach(type => {
+              dispatch(fetchResources({ userId, type, labId }));
+            });
+          });
+        });
       } else {
-           console.log('Starting new session for:', labId);
-           dispatch(fetchLabById(labId));
-           // Start Simulation Environment (Reset & Seed)
-           dispatch(startLab({ userId, labId })).then(() => {
-                // Fetch resources immediately after seeding
-                const resourceTypes = ['VPC', 'SUBNET', 'SECURITY_GROUP', 'EC2_INSTANCE'];
-                resourceTypes.forEach(type => {
-                  dispatch(fetchResources({ userId, type }));
-                });
-           });
+        // Logic: If activeLab matches current URL, assume "Resume Session" and SKIP Reset.
+        if (activeLab && activeLab.labId === labId) {
+          console.log('Resuming existing session for:', labId);
+          // Just refresh resources to sync with Backend
+          const resourceTypes = ['VPC', 'SUBNET', 'SECURITY_GROUP', 'EC2_INSTANCE', 'S3_BUCKET', 'IAM_USER', 'IAM_ROLE', 'IAM_POLICY', 'IAM_GROUP', 'EBS_VOLUME', 'SECRETS_MANAGER_SECRET', 'CLOUDWATCH_LOG_GROUP'];
+          resourceTypes.forEach(type => {
+            dispatch(fetchResources({ userId, type, labId }));
+          });
+        }
       }
     }
-  }, [labId, dispatch, activeLab, userId]);
+  }, [labId, dispatch, activeLab, userId, hasCheckedProgress]);
 
   useEffect(() => {
     if (activeLab && activeLab.steps && activeLab.steps.length > 0) {
@@ -81,10 +124,21 @@ const LabRunner = () => {
       {isSubmitted && submissionResult ? (
           <LabSubmissionResult 
             result={submissionResult} 
-            onRetry={() => {
-                // Determine first step to reset to
-                const firstStep = activeLab.steps[0].stepId;
-                dispatch(setCurrentStep(firstStep));
+            onRetry={async () => {
+                // Reset progress and start lab fresh
+                dispatch(resetSimulation());
+                setHasCheckedProgress(false); // Allow progress check again
+                // Start lab fresh - this will delete resources for this lab and reset progress
+                await dispatch(startLab({ userId, labId }));
+                // Fetch fresh resources
+                const resourceTypes = ['VPC', 'SUBNET', 'SECURITY_GROUP', 'EC2_INSTANCE', 'S3_BUCKET', 'IAM_USER', 'IAM_ROLE', 'IAM_POLICY', 'IAM_GROUP', 'EBS_VOLUME', 'SECRETS_MANAGER_SECRET', 'CLOUDWATCH_LOG_GROUP'];
+                resourceTypes.forEach(type => {
+                  dispatch(fetchResources({ userId, type, labId }));
+                });
+                // Reset to first step
+                if (activeLab?.steps?.[0]) {
+                  dispatch(setCurrentStep(activeLab.steps[0].stepId));
+                }
             }}
           />
       ) : (

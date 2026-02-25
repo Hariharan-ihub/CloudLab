@@ -57,10 +57,11 @@ const FakeIAMConsole = () => {
 
     useEffect(() => {
         if (!userId) return;
-        dispatch(fetchResources({ userId, type: 'IAM_USER' }));
-        dispatch(fetchResources({ userId, type: 'IAM_ROLE' }));
-        dispatch(fetchResources({ userId, type: 'IAM_POLICY' }));
-        dispatch(fetchResources({ userId, type: 'IAM_GROUP' }));
+        const labId = activeLab?.labId || null;
+        dispatch(fetchResources({ userId, type: 'IAM_USER', labId }));
+        dispatch(fetchResources({ userId, type: 'IAM_ROLE', labId }));
+        dispatch(fetchResources({ userId, type: 'IAM_POLICY', labId }));
+        dispatch(fetchResources({ userId, type: 'IAM_GROUP', labId }));
     }, [dispatch, userId]);
 
     const handleCreateUserSubmit = async () => {

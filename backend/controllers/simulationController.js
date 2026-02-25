@@ -3,9 +3,32 @@ const UserProgress = require('../models/UserProgress');
 const Step = require('../models/Step');
 const Lab = require('../models/Lab');
 const LabSubmission = require('../models/LabSubmission');
+const ResourceHistory = require('../models/ResourceHistory');
 const axios = require('axios');
 const geminiService = require('../services/geminiService');
 const youtubeService = require('../services/youtubeService');
+
+// Helper function to save resource history
+async function saveResourceHistory(userId, labId, resourceType, resourceData, resourceId, stepId) {
+  try {
+    const historyEntry = new ResourceHistory({
+      userId,
+      labId: labId || null,
+      resourceType,
+      resourceData,
+      resourceId: resourceId || null,
+      stepId: stepId || null,
+      status: 'active'
+    });
+    await historyEntry.save();
+    console.log(`✅ [Backend] Resource history saved for ${resourceType}`);
+    return historyEntry;
+  } catch (error) {
+    console.error(`⚠️ [Backend] Failed to save resource history for ${resourceType}:`, error);
+    // Don't throw - history is supplementary
+    return null;
+  }
+}
 
 // Initialize Lab Environment
 exports.startLab = async (req, res) => {
@@ -14,8 +37,14 @@ exports.startLab = async (req, res) => {
     const lab = await Lab.findOne({ labId });
     if (!lab) return res.status(404).json({ message: 'Lab not found' });
 
-    // Reset Environment
-    await SimulatedResource.deleteMany({ userId });
+    // Reset Environment - Only delete resources for this specific lab
+    // If labId is provided, only delete resources for that lab
+    // This allows users to have resources from multiple labs
+    const deleteQuery = labId 
+      ? { userId, labId } // Delete only resources for this lab
+      : { userId, labId: null }; // Delete only resources not associated with any lab (legacy)
+    
+    await SimulatedResource.deleteMany(deleteQuery);
     await UserProgress.findOneAndDelete({ userId, labId });
 
     // Seed Initial State
@@ -33,6 +62,7 @@ exports.startLab = async (req, res) => {
             for (const resourceState of resources) {
                  seeds.push({
                      userId,
+                     labId, // Associate seeded resources with this lab
                      resourceType,
                      state: resourceState,
                      status: 'active'
@@ -53,9 +83,20 @@ exports.startLab = async (req, res) => {
 // Fetch resources for a specific service type
 // Fetch resources for a specific service type
 exports.getResources = async (req, res) => {
-  const { userId, type } = req.query;
+  const { userId, type, labId } = req.query;
   try {
-    const resources = await SimulatedResource.find({ userId, resourceType: type });
+    // Build query - if labId is provided, filter by it, otherwise get all user resources
+    const query = { userId, resourceType: type };
+    
+    // If labId is provided, get resources for that lab OR resources not associated with any lab (for backward compatibility)
+    if (labId) {
+      query.$or = [
+        { labId: labId },
+        { labId: null } // Include legacy resources without labId
+      ];
+    }
+    
+    const resources = await SimulatedResource.find(query);
     
     // SIMULATION: Calculate Dynamic State for EC2
     const now = new Date();
@@ -264,6 +305,7 @@ exports.validateAction = async (req, res) => {
             try {
               const instanceData = {
                 userId,
+                labId: labId || null, // Associate with lab if provided
                 resourceType: 'EC2_INSTANCE',
                 state: {
                     name: payload.name || 'MyInstance',
@@ -299,6 +341,26 @@ exports.validateAction = async (req, res) => {
                 instanceId: newInstance.state.instanceId,
                 name: newInstance.state.name
               });
+              
+              // Save to resource history
+              await saveResourceHistory(
+                userId,
+                labId,
+                'EC2_INSTANCE',
+                {
+                  name: payload.name || 'MyInstance',
+                  ami: payload.ami,
+                  instanceType: payload.instanceType,
+                  vpcId: payload.vpcId,
+                  subnetId: payload.subnetId,
+                  securityGroups: payload.securityGroups || [],
+                  userData: payload.userData || '',
+                  keyPair: payload.keyPair || '',
+                  storage: payload.storage || {}
+                },
+                newInstance._id,
+                stepId
+              );
               
               message = 'Instance launched successfully!';
             } catch (dbError) {
@@ -362,6 +424,7 @@ exports.validateAction = async (req, res) => {
 
             const newBucket = new SimulatedResource({
                 userId,
+                labId: labId || null,
                 resourceType: 'S3_BUCKET',
                 state: {
                     bucketName: payload.bucketName,
@@ -371,6 +434,24 @@ exports.validateAction = async (req, res) => {
                 status: 'active'
             });
             await newBucket.save();
+            
+            // Save to resource history
+            await saveResourceHistory(
+              userId,
+              labId,
+              'S3_BUCKET',
+              {
+                bucketName: payload.bucketName,
+                region: 'us-east-1',
+                aclEnabled: payload.aclEnabled || false,
+                blockPublicAccess: payload.blockPublicAccess !== false,
+                versioning: payload.versioning || false,
+                encryption: payload.encryption || 'SSE-S3'
+              },
+              newBucket._id,
+              stepId
+            );
+            
             message = 'Bucket created successfully!';
         }
 
@@ -441,6 +522,7 @@ exports.validateAction = async (req, res) => {
         if (action === 'CREATE_SECRET') {
              const newSecret = new SimulatedResource({
                  userId,
+                 labId: labId || null,
                  resourceType: 'SECRETS_MANAGER_SECRET',
                  state: {
                      name: payload.name,
@@ -467,6 +549,7 @@ exports.validateAction = async (req, res) => {
         if (action === 'CREATE_LOG_GROUP') {
              const newGroup = new SimulatedResource({
                  userId,
+                 labId: labId || null,
                  resourceType: 'CLOUDWATCH_LOG_GROUP',
                  state: {
                      logGroupName: payload.logGroupName,
@@ -483,6 +566,7 @@ exports.validateAction = async (req, res) => {
         if (action === 'CREATE_IAM_USER') {
              const newUser = new SimulatedResource({
                 userId,
+                labId: labId || null,
                 resourceType: 'IAM_USER',
                 state: {
                     userName: payload.userName,
@@ -493,12 +577,27 @@ exports.validateAction = async (req, res) => {
                 status: 'active'
             });
             await newUser.save();
+            
+            // Save to resource history
+            await saveResourceHistory(
+              userId,
+              labId,
+              'IAM_USER',
+              {
+                userName: payload.userName,
+                group: payload.group || null
+              },
+              newUser._id,
+              stepId
+            );
+            
             message = `User ${payload.userName} created.`;
         }
 
         if (action === 'CREATE_IAM_ROLE') {
             const newRole = new SimulatedResource({
                userId,
+               labId: labId || null,
                resourceType: 'IAM_ROLE',
                state: {
                    roleName: payload.roleName,
@@ -516,6 +615,7 @@ exports.validateAction = async (req, res) => {
        if (action === 'CREATE_IAM_POLICY') {
            const newPolicy = new SimulatedResource({
                userId,
+               labId: labId || null,
                resourceType: 'IAM_POLICY',
                state: {
                    policyName: payload.policyName,
@@ -531,6 +631,7 @@ exports.validateAction = async (req, res) => {
        if (action === 'CREATE_IAM_GROUP') {
             const newGroup = new SimulatedResource({
                 userId,
+                labId: labId || null,
                 resourceType: 'IAM_GROUP',
                 state: {
                     groupName: payload.groupName,
@@ -584,6 +685,7 @@ exports.validateAction = async (req, res) => {
         if (action === 'CREATE_VPC') {
             const newVpc = new SimulatedResource({
                 userId,
+                labId: labId || null,
                 resourceType: 'VPC',
                 state: {
                     vpcId: `vpc-${Math.random().toString(36).substr(2, 9)}`,
@@ -605,6 +707,7 @@ exports.validateAction = async (req, res) => {
         if (action === 'CREATE_SUBNET') {
             const newSubnet = new SimulatedResource({
                 userId,
+                labId: labId || null,
                 resourceType: 'SUBNET',
                 state: {
                     subnetId: `subnet-${Math.random().toString(36).substr(2, 9)}`,
@@ -627,6 +730,7 @@ exports.validateAction = async (req, res) => {
         if (action === 'CREATE_SECURITY_GROUP') {
             const newSg = new SimulatedResource({
                 userId,
+                labId: labId || null,
                 resourceType: 'SECURITY_GROUP',
                 state: {
                     groupId: `sg-${Math.random().toString(36).substr(2, 9)}`,
@@ -662,6 +766,7 @@ exports.validateAction = async (req, res) => {
         if (action === 'CREATE_VOLUME') {
              const newVol = new SimulatedResource({
                  userId,
+                 labId: labId || null,
                  resourceType: 'EBS_VOLUME',
                  state: {
                      volumeId: `vol-${Math.random().toString(36).substr(2, 10)}`,
@@ -897,6 +1002,82 @@ exports.getUserSubmission = async (req, res) => {
     });
   } catch (error) {
     console.error('Get user submission error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get user's progress and resources for all labs or a specific lab
+exports.getUserProgress = async (req, res) => {
+  try {
+    const { userId, labId } = req.query;
+    
+    if (!userId) {
+      return res.status(400).json({ message: 'userId is required' });
+    }
+    
+    // Build query for progress
+    const progressQuery = { userId };
+    if (labId) {
+      progressQuery.labId = labId;
+    }
+    
+    // Get all user progress
+    const progressList = await UserProgress.find(progressQuery)
+      .sort({ lastUpdated: -1 });
+    
+    // Get all user resources
+    const resources = await SimulatedResource.find({ userId });
+    
+    // Get all submissions
+    const submissionQuery = { userId };
+    if (labId) {
+      submissionQuery.labId = labId;
+    }
+    const submissions = await LabSubmission.find(submissionQuery)
+      .sort({ submittedAt: -1 });
+    
+    // Organize progress by labId
+    const progressByLab = {};
+    progressList.forEach(progress => {
+      if (!progressByLab[progress.labId]) {
+        progressByLab[progress.labId] = {
+          labId: progress.labId,
+          completedSteps: [],
+          currentStep: null,
+          status: 'in-progress',
+          lastUpdated: progress.lastUpdated
+        };
+      }
+      progressByLab[progress.labId].completedSteps = progress.completedSteps;
+      progressByLab[progress.labId].currentStep = progress.currentStep;
+      progressByLab[progress.labId].status = progress.status;
+      if (progress.lastUpdated > progressByLab[progress.labId].lastUpdated) {
+        progressByLab[progress.labId].lastUpdated = progress.lastUpdated;
+      }
+    });
+    
+    // Organize resources by type
+    const resourcesByType = {};
+    resources.forEach(resource => {
+      if (!resourcesByType[resource.resourceType]) {
+        resourcesByType[resource.resourceType] = [];
+      }
+      resourcesByType[resource.resourceType].push(resource);
+    });
+    
+    res.json({
+      success: true,
+      progress: labId ? progressByLab[labId] || null : progressByLab,
+      resources: resourcesByType,
+      resourcesCount: resources.length,
+      submissions: submissions.map(sub => ({
+        labId: sub.labId,
+        score: sub.score,
+        submittedAt: sub.submittedAt
+      }))
+    });
+  } catch (error) {
+    console.error('Get user progress error:', error);
     res.status(500).json({ message: error.message });
   }
 };

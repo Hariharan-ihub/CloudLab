@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { validateStep, fetchResources } from '../store/simulationSlice';
+import { validateStep, fetchResources, getResourceHistory, saveResourceHistory } from '../store/simulationSlice';
 import { store } from '../store/store';
 import ConfirmationModal from './ConfirmationModal';
 import SmartTerminal from './SmartTerminal';
@@ -58,15 +58,22 @@ const Ec2Dashboard = ({ activeLab }) => {
   useEffect(() => {
      if (!userId) return;
      
-     dispatch(fetchResources({ userId, type: 'EC2_INSTANCE' }));
-     dispatch(fetchResources({ userId, type: 'VPC' }));
-     dispatch(fetchResources({ userId, type: 'SUBNET' }));
-     dispatch(fetchResources({ userId, type: 'SECURITY_GROUP' }));
+     // Use labId if in lab context, otherwise get all resources
+     const labId = activeLab?.labId || null;
+     
+     dispatch(fetchResources({ userId, type: 'EC2_INSTANCE', labId }));
+     dispatch(fetchResources({ userId, type: 'VPC', labId }));
+     dispatch(fetchResources({ userId, type: 'SUBNET', labId }));
+     dispatch(fetchResources({ userId, type: 'SECURITY_GROUP', labId }));
+     
+     // Load resource history for EC2 service
+     dispatch(getResourceHistory({ userId, labId, service: 'EC2' }));
+     
       const interval = setInterval(() => {
-         dispatch(fetchResources({ userId, type: 'EC2_INSTANCE' }));
+         dispatch(fetchResources({ userId, type: 'EC2_INSTANCE', labId }));
       }, 5000);
       return () => clearInterval(interval);
-  }, [dispatch, userId]);
+  }, [dispatch, userId, activeLab?.labId]);
 
   // Validate navigation on mount (Step 1)
   useEffect(() => {
@@ -120,7 +127,28 @@ const Ec2Dashboard = ({ activeLab }) => {
           console.log('✅ [EC2 Console] Launch successful:', result.payload);
           setShowLaunchSuccess(true);
           toast.success('Instance launched successfully!');
-          dispatch(fetchResources({ userId, type: 'EC2_INSTANCE' }));
+          
+          // Save to resource history
+          const labId = activeLab?.labId || null;
+          dispatch(saveResourceHistory({
+            userId,
+            labId,
+            resourceType: 'EC2_INSTANCE',
+            resourceData: {
+              name: payload.name || 'MyInstance',
+              ami: payload.ami,
+              instanceType: payload.instanceType,
+              vpcId: payload.vpcId,
+              subnetId: payload.subnetId,
+              securityGroups: payload.securityGroups || [],
+              userData: payload.userData || '',
+              keyPair: payload.keyPair || '',
+              storage: payload.storage || {}
+            },
+            stepId: stepId || null
+          }));
+          
+          dispatch(fetchResources({ userId, type: 'EC2_INSTANCE', labId }));
         } else {
           console.error('❌ [EC2 Console] Launch failed:', result.payload);
           const errorMsg = result.payload?.message || 'Failed to launch instance.';
@@ -128,7 +156,8 @@ const Ec2Dashboard = ({ activeLab }) => {
         }
       } else {
         // Generic refresh for other actions
-        setTimeout(() => dispatch(fetchResources({ userId, type: 'EC2_INSTANCE' })), 500); 
+        const labId = activeLab?.labId || null;
+        setTimeout(() => dispatch(fetchResources({ userId, type: 'EC2_INSTANCE', labId })), 500); 
       }
     } catch (error) {
       console.error('❌ [EC2 Console] handleAction error:', error);
