@@ -10,8 +10,8 @@ const UserSchema = new mongoose.Schema({
     unique: true,
     sparse: true, // Allows multiple null values
     trim: true,
-    minlength: [3, 'Username must be at least 3 characters'],
-    maxlength: [30, 'Username cannot exceed 30 characters']
+    minLength: [3, 'Username must be at least 3 characters'],
+    maxLength: [30, 'Username cannot exceed 30 characters']
   },
   email: {
     type: String,
@@ -27,18 +27,7 @@ const UserSchema = new mongoose.Schema({
       // Password not required for OAuth users
       return !this.googleId && this.authProvider !== 'google';
     },
-    minlength: {
-      value: 6,
-      message: 'Password must be at least 6 characters'
-    },
-    validate: {
-      validator: function(value) {
-        // Skip validation if no password (OAuth users)
-        if (!value) return true;
-        return value.length >= 6;
-      },
-      message: 'Password must be at least 6 characters'
-    }
+    minLength: [6, 'Password must be at least 6 characters']
   },
   googleId: {
     type: String,
@@ -64,6 +53,14 @@ const UserSchema = new mongoose.Schema({
   },
   lastLogin: {
     type: Date
+  },
+  hasCompletedOnboarding: {
+    type: Boolean,
+    default: false
+  },
+  selectedRole: {
+    type: Object,
+    default: null
   }
 });
 

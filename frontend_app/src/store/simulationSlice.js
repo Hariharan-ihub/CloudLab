@@ -273,7 +273,25 @@ const simulationSlice = createSlice({
     // Resource History State
     resourceHistory: null,
     historyLoading: false,
-    historyError: null
+    historyError: null,
+
+    // Pre-Lab Flow State
+    preLabPhase: 'role', // null | 'role' | 'project' | 'jenkins' | 'completed'
+    selectedRole: null,
+    projectLink: '',
+    repoInfo: null,
+    jenkinsStatus: {
+        status: 'idle', // idle | running | success | error
+        currentStage: 0,
+        stages: [
+            { id: 1, name: 'Declarative: Checkout SCM', status: 'idle', logs: [] },
+            { id: 2, name: 'AWS ECR Login', status: 'idle', logs: [] },
+            { id: 3, name: 'Build & Push Docker Image', status: 'idle', logs: [] },
+            { id: 4, name: 'Register New Task Definition with Latest Image', status: 'idle', logs: [] },
+            { id: 5, name: 'Update ECS Service with New Task Definition', status: 'idle', logs: [] },
+            { id: 6, name: 'Declarative: Post Actions', status: 'idle', logs: [] }
+        ]
+    }
   },
   reducers: {
     setCurrentStep: (state, action) => {
@@ -292,6 +310,33 @@ const simulationSlice = createSlice({
       state.lastValidatedStepId = null;
       state.submissionStatus = 'idle';
       state.submissionResult = null;
+      
+      // Note: We don't reset preLabPhase here as it's a global onboarding state
+      // that should persist when navigating between labs or dashboard.
+    },
+    setPreLabPhase: (state, action) => {
+      state.preLabPhase = action.payload;
+    },
+    setSelectedRole: (state, action) => {
+      state.selectedRole = action.payload;
+    },
+    setProjectLink: (state, action) => {
+      state.projectLink = action.payload;
+      state.repoInfo = null; // Clear info when link changes
+    },
+    setRepoInfo: (state, action) => {
+      state.repoInfo = action.payload;
+    },
+    updateJenkinsStage: (state, action) => {
+        const { stageIndex, status, log } = action.payload;
+        if (state.jenkinsStatus.stages[stageIndex]) {
+            if (status) state.jenkinsStatus.stages[stageIndex].status = status;
+            if (log) state.jenkinsStatus.stages[stageIndex].logs.push(log);
+            if (status === 'running') state.jenkinsStatus.currentStage = stageIndex + 1;
+        }
+    },
+    setJenkinsStatus: (state, action) => {
+        state.jenkinsStatus.status = action.payload;
     }
   },
   extraReducers: (builder) => {
@@ -383,6 +428,7 @@ const simulationSlice = createSlice({
         // Restore completed steps if progress exists
         if (action.payload.progress) {
           const progress = action.payload.progress;
+
           if (typeof progress === 'object' && !Array.isArray(progress)) {
             // Single lab progress
             if (progress.completedSteps) {
@@ -466,5 +512,14 @@ const simulationSlice = createSlice({
   },
 });
 
-export const { setCurrentStep, resetSimulation } = simulationSlice.actions;
+export const { 
+    setCurrentStep, 
+    resetSimulation, 
+    setPreLabPhase, 
+    setSelectedRole, 
+    setProjectLink, 
+    setRepoInfo, 
+    updateJenkinsStage, 
+    setJenkinsStatus 
+} = simulationSlice.actions;
 export default simulationSlice.reducer;

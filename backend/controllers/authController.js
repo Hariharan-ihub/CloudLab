@@ -51,7 +51,9 @@ exports.register = async (req, res) => {
         username: user.username,
         email: user.email,
         firstName: user.firstName,
-        lastName: user.lastName
+        lastName: user.lastName,
+        hasCompletedOnboarding: user.hasCompletedOnboarding,
+        selectedRole: user.selectedRole
       }
     });
   } catch (error) {
@@ -112,7 +114,9 @@ exports.login = async (req, res) => {
         username: user.username,
         email: user.email,
         firstName: user.firstName,
-        lastName: user.lastName
+        lastName: user.lastName,
+        hasCompletedOnboarding: user.hasCompletedOnboarding,
+        selectedRole: user.selectedRole
       }
     });
   } catch (error) {
@@ -145,7 +149,9 @@ exports.getCurrentUser = async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         createdAt: user.createdAt,
-        lastLogin: user.lastLogin
+        lastLogin: user.lastLogin,
+        hasCompletedOnboarding: user.hasCompletedOnboarding,
+        selectedRole: user.selectedRole
       }
     });
   } catch (error) {
@@ -157,3 +163,54 @@ exports.getCurrentUser = async (req, res) => {
   }
 };
 
+// Update onboarding status
+exports.completeOnboarding = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    user.hasCompletedOnboarding = true;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Onboarding completed successfully',
+      hasCompletedOnboarding: true,
+      selectedRole: user.selectedRole
+    });
+  } catch (error) {
+    console.error('Complete onboarding error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update onboarding status'
+    });
+  }
+};
+
+// Save selected role
+exports.saveSelectedRole = async (req, res) => {
+  try {
+    const { selectedRole } = req.body;
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    user.selectedRole = selectedRole;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Role saved successfully',
+      selectedRole: user.selectedRole
+    });
+  } catch (error) {
+    console.error('Save role error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to save role'
+    });
+  }
+};

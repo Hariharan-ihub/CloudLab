@@ -37,6 +37,8 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 
 // Protected routes
 router.get('/me', authenticate, authController.getCurrentUser);
+router.post('/complete-onboarding', authenticate, authController.completeOnboarding);
+router.post('/save-role', authenticate, authController.saveSelectedRole);
 
 module.exports = router;
 

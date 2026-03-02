@@ -41,11 +41,13 @@ const labRoutes = require('./routes/labRoutes');
 const simulationRoutes = require('./routes/simulationRoutes');
 const authRoutes = require('./routes/authRoutes');
 const resourceHistoryRoutes = require('./routes/resourceHistoryRoutes');
+const githubRoutes = require('./routes/githubRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/labs', labRoutes);
 app.use('/api/simulation', simulationRoutes);
 app.use('/api/resource-history', resourceHistoryRoutes);
+app.use('/api/github', githubRoutes);
 
 app.get('/', (req, res) => {
   res.send('AWS Learning Lab API is running');

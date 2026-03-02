@@ -95,6 +95,79 @@ export const getCurrentUser = createAsyncThunk(
   }
 );
 
+// Complete onboarding
+export const completeOnboarding = createAsyncThunk(
+  'auth/completeOnboarding',
+  async (_, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return rejectWithValue({ message: 'No token found' });
+
+      const response = await fetch('/api/auth/complete-onboarding', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) return rejectWithValue(data);
+
+      // Update stored user if possible
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        try {
+            const user = JSON.parse(userStr);
+            user.hasCompletedOnboarding = true;
+            localStorage.setItem('user', JSON.stringify(user));
+        } catch (e) { console.error('Error updating localStorage:', e); }
+      }
+
+      return data;
+    } catch (error) {
+      return rejectWithValue({ message: error.message });
+    }
+  }
+);
+
+// Save selected role
+export const saveRole = createAsyncThunk(
+  'auth/saveRole',
+  async (selectedRole, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return rejectWithValue({ message: 'No token found' });
+
+      const response = await fetch('/api/auth/save-role', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ selectedRole })
+      });
+
+      const data = await response.json();
+      if (!response.ok) return rejectWithValue(data);
+
+      // Update stored user if possible
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        try {
+            const user = JSON.parse(userStr);
+            user.selectedRole = selectedRole;
+            localStorage.setItem('user', JSON.stringify(user));
+        } catch (e) { console.error('Error updating localStorage:', e); }
+      }
+
+      return data;
+    } catch (error) {
+      return rejectWithValue({ message: error.message });
+    }
+  }
+);
+
 const initialState = {
   user: null,
   token: localStorage.getItem('token') || null,
@@ -186,6 +259,18 @@ const authSlice = createSlice({
         state.user = null;
         state.token = null;
         state.isAuthenticated = false;
+      })
+      // Complete Onboarding
+      .addCase(completeOnboarding.fulfilled, (state) => {
+        if (state.user) {
+          state.user.hasCompletedOnboarding = true;
+        }
+      })
+      // Save Role
+      .addCase(saveRole.fulfilled, (state, action) => {
+        if (state.user) {
+          state.user.selectedRole = action.payload.selectedRole;
+        }
       });
   },
 });

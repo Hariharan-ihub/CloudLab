@@ -7,6 +7,11 @@ import { USER_ID } from '../constants/user';
 import FakeEC2Console from './FakeEC2Console';
 import FakeS3Console from './FakeS3Console';
 import FakeIAMConsole from './FakeIAMConsole';
+import FakeVPCConsole from './FakeVPCConsole';
+import FakeSecretsManagerConsole from './FakeSecretsManagerConsole';
+import FakeCloudWatchConsole from './FakeCloudWatchConsole';
+import FakeSecurityGroupConsole from './FakeSecurityGroupConsole';
+import FakeEBSConsole from './FakeEBSConsole';
 import LabSubmissionResult from './LabSubmissionResult';
 
 const LabRunner = () => {
@@ -43,8 +48,6 @@ const LabRunner = () => {
           
           if (hasExistingProgress) {
             console.log('✅ Found existing progress, resuming session');
-            console.log('Progress:', progress);
-            console.log('Resources count:', resourcesCount);
             // Load the lab data
             dispatch(fetchLabById(labId));
             // Resources are already loaded by loadUserProgress
@@ -114,8 +117,18 @@ const LabRunner = () => {
               return <FakeS3Console activeLab={activeLab} />;
           case 'IAM':
               return <FakeIAMConsole activeLab={activeLab} />;
+          case 'VPC':
+          case 'SUBNET':
+          case 'SECURITY_GROUP':
+              return <FakeVPCConsole activeLab={activeLab} />;
+          case 'SECRETS_MANAGER':
+              return <FakeSecretsManagerConsole activeLab={activeLab} />;
+          case 'CLOUDWATCH':
+              return <FakeCloudWatchConsole activeLab={activeLab} />;
+          case 'EBS':
+              return <FakeEBSConsole activeLab={activeLab} />;
           default:
-              return <div>Service Simulation Not Implemented</div>;
+              return <div className="p-8 text-center text-gray-500">Service "{activeLab.service}" simulation not yet implemented.</div>;
       }
   };
 
