@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { updateJenkinsStage, setJenkinsStatus, setPreLabPhase } from '../../store/simulationSlice';
 import { completeOnboarding } from '../../store/authSlice';
+import { slugify } from '../../utils/slugify';
 import { 
     Settings, Play, CheckCircle2, Circle, Loader2, 
     Terminal as TerminalIcon, AlertTriangle, Search, 
@@ -11,6 +13,7 @@ import {
 
 const JenkinsConsole = () => {
     const dispatch = useDispatch();
+    const navigate = useNavigate();
     const { repoInfo, jenkinsStatus, selectedRole } = useSelector(state => state.simulation);
     const [activeLogs, setActiveLogs] = useState([]);
     const scrollRef = useRef(null);
@@ -84,6 +87,8 @@ const JenkinsConsole = () => {
 
             setTimeout(() => {
                 dispatch(setPreLabPhase('completed'));
+                const roleSlug = selectedRole?.title ? slugify(selectedRole.title) : 'full-stack-developer';
+                navigate(`/${roleSlug}/services`);
             }, 3000);
         };
 

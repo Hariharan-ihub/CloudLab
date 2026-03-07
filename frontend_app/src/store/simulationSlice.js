@@ -508,7 +508,26 @@ const simulationSlice = createSlice({
       .addCase(getResourceHistory.rejected, (state, action) => {
         state.historyLoading = false;
         state.historyError = action.payload?.message || 'Failed to load resource history';
-      });
+      })
+      // Sync with Auth actions
+      .addMatcher(
+        (action) => action.type.endsWith('/fulfilled') && (
+          action.type.startsWith('auth/login') || 
+          action.type.startsWith('auth/register') || 
+          action.type.startsWith('auth/getCurrentUser') ||
+          action.type.startsWith('auth/saveRole') ||
+          action.type.startsWith('auth/saveRepoInfo') ||
+          action.type.startsWith('auth/completeOnboarding')
+        ),
+        (state, action) => {
+          const user = action.payload.user || action.payload;
+          if (user && typeof user === 'object') {
+            if (user.onboardingPhase) state.preLabPhase = user.onboardingPhase;
+            if (user.selectedRole) state.selectedRole = user.selectedRole;
+            if (user.onboardingRepo) state.repoInfo = user.onboardingRepo;
+          }
+        }
+      );
   },
 });
 

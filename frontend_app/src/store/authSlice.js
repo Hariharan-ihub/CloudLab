@@ -114,12 +114,12 @@ export const completeOnboarding = createAsyncThunk(
       const data = await response.json();
       if (!response.ok) return rejectWithValue(data);
 
-      // Update stored user if possible
       const userStr = localStorage.getItem('user');
       if (userStr) {
         try {
             const user = JSON.parse(userStr);
             user.hasCompletedOnboarding = true;
+            user.onboardingPhase = 'completed';
             localStorage.setItem('user', JSON.stringify(user));
         } catch (e) { console.error('Error updating localStorage:', e); }
       }
@@ -151,12 +151,49 @@ export const saveRole = createAsyncThunk(
       const data = await response.json();
       if (!response.ok) return rejectWithValue(data);
 
-      // Update stored user if possible
       const userStr = localStorage.getItem('user');
       if (userStr) {
         try {
             const user = JSON.parse(userStr);
             user.selectedRole = selectedRole;
+            user.onboardingPhase = 'project';
+            localStorage.setItem('user', JSON.stringify(user));
+        } catch (e) { console.error('Error updating localStorage:', e); }
+      }
+
+      return data;
+    } catch (error) {
+      return rejectWithValue({ message: error.message });
+    }
+  }
+);
+
+// Save repo info
+export const saveRepoInfo = createAsyncThunk(
+  'auth/saveRepoInfo',
+  async (repoInfo, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return rejectWithValue({ message: 'No token found' });
+
+      const response = await fetch('/api/auth/save-repo', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ repoInfo })
+      });
+
+      const data = await response.json();
+      if (!response.ok) return rejectWithValue(data);
+
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        try {
+            const user = JSON.parse(userStr);
+            user.onboardingRepo = repoInfo;
+            user.onboardingPhase = 'jenkins';
             localStorage.setItem('user', JSON.stringify(user));
         } catch (e) { console.error('Error updating localStorage:', e); }
       }
@@ -250,7 +287,7 @@ const authSlice = createSlice({
       .addCase(getCurrentUser.fulfilled, (state, action) => {
         state.loading = false;
         state.user = action.payload.user;
-        state.token = localStorage.getItem('token'); // Ensure token is set
+        state.token = localStorage.getItem('token');
         state.isAuthenticated = true;
         state.error = null;
       })
@@ -264,12 +301,21 @@ const authSlice = createSlice({
       .addCase(completeOnboarding.fulfilled, (state) => {
         if (state.user) {
           state.user.hasCompletedOnboarding = true;
+          state.user.onboardingPhase = 'completed';
         }
       })
       // Save Role
       .addCase(saveRole.fulfilled, (state, action) => {
         if (state.user) {
           state.user.selectedRole = action.payload.selectedRole;
+          state.user.onboardingPhase = action.payload.onboardingPhase;
+        }
+      })
+      // Save Repo Info
+      .addCase(saveRepoInfo.fulfilled, (state, action) => {
+        if (state.user) {
+          state.user.onboardingRepo = action.payload.onboardingRepo;
+          state.user.onboardingPhase = action.payload.onboardingPhase;
         }
       });
   },
@@ -277,4 +323,3 @@ const authSlice = createSlice({
 
 export const { logout, clearError, initializeAuth } = authSlice.actions;
 export default authSlice.reducer;
-

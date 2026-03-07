@@ -1,7 +1,9 @@
 const axios = require('axios');
+require('dotenv').config();
+
 
 // Search YouTube for relevant tutorial videos based on improvements
-exports.searchVideos = async (improvements) => {
+exports.searchVideos = async (improvements, labContext = '') => {
   const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
   
   if (!YOUTUBE_API_KEY) {
@@ -15,11 +17,10 @@ exports.searchVideos = async (improvements) => {
   }
 
   // Always fetch minimum 1-2 videos based on improvements
-  // Get videos from first 2 improvements (1 video per improvement = 2 videos total)
   const maxVideos = 2;
   const videosPerImprovement = 1;
 
-  console.log(`🔍 [YouTube] Searching for videos based on ${improvements.length} improvements...`);
+  console.log(`🔍 [YouTube] Searching for videos based on ${improvements.length} improvements (Context: ${labContext})...`);
 
   try {
     const videos = [];
@@ -32,8 +33,8 @@ exports.searchVideos = async (improvements) => {
       if (videos.length >= maxVideos) break;
       
       try {
-        // Extract key terms from improvement text
-        const query = extractSearchQuery(improvement);
+        // Extract key terms from improvement text and add context
+        const query = extractSearchQuery(improvement, labContext);
         console.log(`🔍 [YouTube] Searching for: "${query}"`);
         
         const response = await axios.get(
@@ -55,14 +56,12 @@ exports.searchVideos = async (improvements) => {
           console.log(`✅ [YouTube] Found ${response.data.items.length} results for "${query}"`);
           
           for (const item of response.data.items) {
-            // Skip if we already have this video or reached max
             if (seenVideoIds.has(item.id.videoId) || videos.length >= maxVideos) {
               continue;
             }
             
             seenVideoIds.add(item.id.videoId);
             
-            // Get video duration if available (optional, don't fail if this fails)
             let duration = null;
             try {
               const videoDetails = await axios.get(
@@ -79,7 +78,6 @@ exports.searchVideos = async (improvements) => {
                 duration = parseDuration(videoDetails.data.items[0].contentDetails.duration);
               }
             } catch (e) {
-              // Duration fetch failed, continue without it
               console.log(`⚠️ [YouTube] Could not fetch duration for video ${item.id.videoId}`);
             }
             
@@ -91,7 +89,7 @@ exports.searchVideos = async (improvements) => {
               url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
               description: item.snippet.description?.substring(0, 150) || '',
               duration: duration,
-              relatedTo: improvement // Track which improvement this video addresses
+              relatedTo: improvement
             };
             
             videos.push(videoData);
@@ -104,11 +102,9 @@ exports.searchVideos = async (improvements) => {
         }
       } catch (error) {
         console.error(`❌ [YouTube] Error searching for "${improvement}":`, error.response?.data || error.message);
-        // Continue to next improvement
       }
     }
 
-    console.log(`✅ Found ${videos.length} YouTube videos based on ${improvements.length} improvements`);
     return videos;
   } catch (error) {
     console.error('YouTube API error:', error.message);
@@ -132,18 +128,44 @@ function parseDuration(duration) {
 }
 
 // Extract search query from improvement text
-function extractSearchQuery(improvement) {
-  // Remove common prefixes and clean up
-  let query = improvement
-    .replace(/^(Review|Understanding|Consider|Focus on|Don't forget|Try|Learn about)\s+/i, '')
+function extractSearchQuery(improvement, labContext = '') {
+  // Clean up improvement by removing meta-feedback and common prefixes
+  let cleaned = improvement
+    .replace(/^(Review|Understanding|Consider|Focus on|Don't forget|Try|Learn about|It seems you got stuck early on)\s+/i, '')
+    .replace(/Try reviewing the lab scenario again/i, '')
     .replace(/\.$/, '')
     .trim();
-  
-  // Add AWS context if not present
-  if (!query.toLowerCase().includes('aws')) {
-    query = query + ' AWS tutorial';
+    
+  // If the improvement is very generic, purely rely on the labContext
+  const isGeneric = !cleaned || 
+                    cleaned.toLowerCase().includes('scenario again') || 
+                    cleaned.toLowerCase().includes('prerequisites first') ||
+                    cleaned.length < 5;
+                    
+  let query = '';
+  if (isGeneric && labContext) {
+    query = `${labContext} tutorial`;
+  } else if (labContext) {
+      // If we have a technical detail, combine it with context
+      // but avoid doubling up if context is already in the cleaning
+      if (cleaned.toLowerCase().includes(labContext.toLowerCase())) {
+          query = cleaned;
+      } else {
+          query = `${labContext} ${cleaned}`;
+      }
+  } else {
+    query = cleaned;
   }
   
-  return query;
+  // Clean up whitespace
+  query = query.trim();
+  
+  // Ensure AWS is in there
+  if (!query.toLowerCase().includes('aws')) {
+    query = 'AWS ' + query;
+  }
+  
+  // Cap length to avoid API issues and keep it focused
+  return query.substring(0, 100);
 }
 

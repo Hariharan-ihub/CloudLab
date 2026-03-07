@@ -58,7 +58,16 @@ const UserSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  onboardingPhase: {
+    type: String,
+    enum: ['role', 'project', 'jenkins', 'completed'],
+    default: 'role'
+  },
   selectedRole: {
+    type: Object,
+    default: null
+  },
+  onboardingRepo: {
     type: Object,
     default: null
   }

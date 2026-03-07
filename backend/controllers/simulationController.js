@@ -906,7 +906,7 @@ exports.submitLab = async (req, res) => {
           try {
               // Fetch videos based on improvements (minimum 1-2 videos)
               console.log(`🔍 Searching YouTube for videos based on ${feedback.improvements.length} improvements...`);
-              youtubeResults = await youtubeService.searchVideos(feedback.improvements);
+              youtubeResults = await youtubeService.searchVideos(feedback.improvements, lab.title);
               console.log(`✅ Found ${youtubeResults.length} YouTube videos based on improvements`);
           } catch (error) {
               console.error('❌ YouTube API error:', error.message);

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bell, HelpCircle, ChevronDown, User, Search, Settings, LogOut, ArrowRight, Check, Terminal } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { logout } from '../../store/authSlice';
 import toast from 'react-hot-toast';
@@ -28,6 +28,7 @@ const AwsTopBar = ({ onToggleCloudShell }) => {
     
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const { roleSlug } = useParams();
     const { resources } = useSelector(state => state.simulation);
     const { activeLab } = useSelector(state => state.lab);
     const { user } = useSelector(state => state.auth);
@@ -82,18 +83,18 @@ const AwsTopBar = ({ onToggleCloudShell }) => {
 
     // Flatten logic for search
     const allResources = [
-        { type: 'Service', name: 'EC2', id: 'Compute', link: '/service/ec2' },
-        { type: 'Service', name: 'S3', id: 'Storage', link: '/service/s3' },
-        { type: 'Service', name: 'VPC', id: 'Networking', link: '/service/vpc' },
-        { type: 'Service', name: 'IAM', id: 'Security', link: '/service/iam' },
-        { type: 'Service', name: 'Secrets Manager', id: 'Security', link: '/service/secretsmanager' },
-        { type: 'Service', name: 'CloudWatch', id: 'Management', link: '/service/cloudwatch' },
-        ...(resources.ec2 || []).map(r => ({ ...r, type: 'EC2', name: r.state.name, id: r.state.instanceId, link: '/service/ec2' })),
-        ...(resources.s3 || []).map(r => ({ ...r, type: 'S3', name: r.state.bucketName, id: r.state.bucketName, link: '/service/s3' })),
-        ...(resources.vpc || []).map(r => ({ ...r, type: 'VPC', name: r.state.name, id: r.state.vpcId, link: '/service/vpc' })),
-        ...(resources.iam || []).map(r => ({ ...r, type: 'IAM User', name: r.state.userName, id: r.state.userName, link: '/service/iam' })),
-        ...(resources.secrets || []).map(r => ({ ...r, type: 'Secret', name: r.state.name, id: r.state.name, link: '/service/secretsmanager' })),
-        ...(resources.logGroups || []).map(r => ({ ...r, type: 'Log Group', name: r.state.logGroupName, id: r.state.logGroupName, link: '/service/cloudwatch' }))
+        { type: 'Service', name: 'EC2', id: 'Compute', link: `/${roleSlug}/service/ec2` },
+        { type: 'Service', name: 'S3', id: 'Storage', link: `/${roleSlug}/service/s3` },
+        { type: 'Service', name: 'VPC', id: 'Networking', link: `/${roleSlug}/service/vpc` },
+        { type: 'Service', name: 'IAM', id: 'Security', link: `/${roleSlug}/service/iam` },
+        { type: 'Service', name: 'Secrets Manager', id: 'Security', link: `/${roleSlug}/service/secretsmanager` },
+        { type: 'Service', name: 'CloudWatch', id: 'Management', link: `/${roleSlug}/service/cloudwatch` },
+        ...(resources.ec2 || []).map(r => ({ ...r, type: 'EC2', name: r.state.name, id: r.state.instanceId, link: `/${roleSlug}/service/ec2` })),
+        ...(resources.s3 || []).map(r => ({ ...r, type: 'S3', name: r.state.bucketName, id: r.state.bucketName, link: `/${roleSlug}/service/s3` })),
+        ...(resources.vpc || []).map(r => ({ ...r, type: 'VPC', name: r.state.name, id: r.state.vpcId, link: `/${roleSlug}/service/vpc` })),
+        ...(resources.iam || []).map(r => ({ ...r, type: 'IAM User', name: r.state.userName, id: r.state.userName, link: `/${roleSlug}/service/iam` })),
+        ...(resources.secrets || []).map(r => ({ ...r, type: 'Secret', name: r.state.name, id: r.state.name, link: `/${roleSlug}/service/secretsmanager` })),
+        ...(resources.logGroups || []).map(r => ({ ...r, type: 'Log Group', name: r.state.logGroupName, id: r.state.logGroupName, link: `/${roleSlug}/service/cloudwatch` }))
     ];
 
     const filteredResources = searchQuery 
@@ -104,8 +105,7 @@ const AwsTopBar = ({ onToggleCloudShell }) => {
         <header ref={topBarRef} className="bg-aws-nav text-white h-[50px] flex items-center justify-between px-4 shadow-md z-50 relative select-none">
             {/* Left: Logo & Services */}
             <div className="flex items-center space-x-4 flex-1">
-                <Link to="/" className="font-bold text-lg tracking-tight flex items-center hover:opacity-80 transition-opacity flex-shrink-0">
-                    {/* <span className="text-aws-orange mr-2 text-2xl">☁️</span>  */}
+                <Link to={`/${roleSlug}/services`} className="font-bold text-lg tracking-tight flex items-center hover:opacity-80 transition-opacity flex-shrink-0">
                     <span className="hidden md:inline">Cloud Lab</span>
                 </Link>
                 
@@ -121,14 +121,14 @@ const AwsTopBar = ({ onToggleCloudShell }) => {
                     {openMenu === 'services' && (
                         <div className="absolute top-full left-0 mt-1 w-64 bg-white text-gray-800 shadow-xl rounded border border-gray-200 p-2 animate-fade-in z-50">
                             <div className="py-2">
-                                <Link to="/service/ec2" className="block px-4 py-2 hover:bg-gray-100 text-sm font-medium" onClick={() => setOpenMenu(null)}>Compute (EC2)</Link>
-                                <Link to="/service/s3" className="block px-4 py-2 hover:bg-gray-100 text-sm font-medium" onClick={() => setOpenMenu(null)}>Storage (S3)</Link>
+                                <Link to={`/${roleSlug}/service/ec2`} className="block px-4 py-2 hover:bg-gray-100 text-sm font-medium" onClick={() => setOpenMenu(null)}>Compute (EC2)</Link>
+                                <Link to={`/${roleSlug}/service/s3`} className="block px-4 py-2 hover:bg-gray-100 text-sm font-medium" onClick={() => setOpenMenu(null)}>Storage (S3)</Link>
                                 <div className="border-t my-1"></div>
-                                <Link to="/service/vpc" className="block px-4 py-2 hover:bg-gray-100 text-sm font-medium" onClick={() => setOpenMenu(null)}>VPC & Networking</Link>
-                                <Link to="/service/iam" className="block px-4 py-2 hover:bg-gray-100 text-sm font-medium" onClick={() => setOpenMenu(null)}>IAM & Security</Link>
+                                <Link to={`/${roleSlug}/service/vpc`} className="block px-4 py-2 hover:bg-gray-100 text-sm font-medium" onClick={() => setOpenMenu(null)}>VPC & Networking</Link>
+                                <Link to={`/${roleSlug}/service/iam`} className="block px-4 py-2 hover:bg-gray-100 text-sm font-medium" onClick={() => setOpenMenu(null)}>IAM & Security</Link>
                                 <div className="border-t my-1"></div>
-                                <Link to="/service/secretsmanager" className="block px-4 py-2 hover:bg-gray-100 text-sm font-medium" onClick={() => setOpenMenu(null)}>Secrets Manager</Link>
-                                <Link to="/service/cloudwatch" className="block px-4 py-2 hover:bg-gray-100 text-sm font-medium" onClick={() => setOpenMenu(null)}>CloudWatch</Link>
+                                <Link to={`/${roleSlug}/service/secretsmanager`} className="block px-4 py-2 hover:bg-gray-100 text-sm font-medium" onClick={() => setOpenMenu(null)}>Secrets Manager</Link>
+                                <Link to={`/${roleSlug}/service/cloudwatch`} className="block px-4 py-2 hover:bg-gray-100 text-sm font-medium" onClick={() => setOpenMenu(null)}>CloudWatch</Link>
                             </div>
                         </div>
                     )}
@@ -260,7 +260,7 @@ const AwsTopBar = ({ onToggleCloudShell }) => {
                              <div className="px-4 py-1 text-xs text-gray-400 border-b">
                                  {user?.email}
                              </div>
-                             <Link to="/settings" className="flex items-center px-4 py-2 hover:bg-gray-100 text-sm" onClick={() => setOpenMenu(null)}>
+                             <Link to={`/${roleSlug}/settings`} className="flex items-center px-4 py-2 hover:bg-gray-100 text-sm" onClick={() => setOpenMenu(null)}>
                                  <Settings size={14} className="mr-2"/> Settings
                              </Link>
                              <div 

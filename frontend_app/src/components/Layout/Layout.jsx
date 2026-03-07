@@ -38,11 +38,17 @@ const Layout = () => {
     <div className="flex flex-col h-screen w-full bg-aws-bg overflow-hidden text-aws-text">
       <AwsTopBar onToggleCloudShell={() => setShowCloudShell(!showCloudShell)} />
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Left Sidebar */}
-        {location.pathname !== '/' && <AwsSidebar />}
+        {/* Left Sidebar - Hidden on Dashboard and Onboarding */}
+        {!['/services', '/', '/role-selection'].includes(location.pathname) && 
+         !location.pathname.endsWith('/services') && 
+         !location.pathname.endsWith('/onboarding') && 
+         <AwsSidebar />}
 
-        {/* Mission Control Panel (Lab Steps) - Only show when NOT on home */}
-        {activeLab && location.pathname !== '/' && (
+        {/* Mission Control Panel (Lab Steps) - Only show when NOT on home/dashboard/onboarding */}
+        {activeLab && 
+         !['/services', '/', '/role-selection'].includes(location.pathname) && 
+         !location.pathname.endsWith('/services') && 
+         !location.pathname.endsWith('/onboarding') && (
             <LabStepPanel lab={activeLab} currentStepId={currentStepId} />
         )}
         

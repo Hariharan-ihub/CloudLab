@@ -53,7 +53,9 @@ exports.register = async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         hasCompletedOnboarding: user.hasCompletedOnboarding,
-        selectedRole: user.selectedRole
+        onboardingPhase: user.onboardingPhase,
+        selectedRole: user.selectedRole,
+        onboardingRepo: user.onboardingRepo
       }
     });
   } catch (error) {
@@ -116,7 +118,9 @@ exports.login = async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         hasCompletedOnboarding: user.hasCompletedOnboarding,
-        selectedRole: user.selectedRole
+        onboardingPhase: user.onboardingPhase,
+        selectedRole: user.selectedRole,
+        onboardingRepo: user.onboardingRepo
       }
     });
   } catch (error) {
@@ -151,7 +155,9 @@ exports.getCurrentUser = async (req, res) => {
         createdAt: user.createdAt,
         lastLogin: user.lastLogin,
         hasCompletedOnboarding: user.hasCompletedOnboarding,
-        selectedRole: user.selectedRole
+        onboardingPhase: user.onboardingPhase,
+        selectedRole: user.selectedRole,
+        onboardingRepo: user.onboardingRepo
       }
     });
   } catch (error) {
@@ -172,12 +178,14 @@ exports.completeOnboarding = async (req, res) => {
     }
 
     user.hasCompletedOnboarding = true;
+    user.onboardingPhase = 'completed';
     await user.save();
 
     res.json({
       success: true,
       message: 'Onboarding completed successfully',
       hasCompletedOnboarding: true,
+      onboardingPhase: 'completed',
       selectedRole: user.selectedRole
     });
   } catch (error) {
@@ -199,18 +207,48 @@ exports.saveSelectedRole = async (req, res) => {
     }
 
     user.selectedRole = selectedRole;
+    user.onboardingPhase = 'project';
     await user.save();
 
     res.json({
       success: true,
       message: 'Role saved successfully',
-      selectedRole: user.selectedRole
+      selectedRole: user.selectedRole,
+      onboardingPhase: user.onboardingPhase
     });
   } catch (error) {
     console.error('Save role error:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to save role'
+    });
+  }
+};
+
+// Save onboarding repo
+exports.saveOnboardingRepo = async (req, res) => {
+  try {
+    const { repoInfo } = req.body;
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    user.onboardingRepo = repoInfo;
+    user.onboardingPhase = 'jenkins';
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Repository info saved successfully',
+      onboardingRepo: user.onboardingRepo,
+      onboardingPhase: user.onboardingPhase
+    });
+  } catch (error) {
+    console.error('Save onboarding repo error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to save repository info'
     });
   }
 };

@@ -7,18 +7,18 @@ import { loadUserProgress } from '../store/simulationSlice';
 const ResourceLoader = ({ children }) => {
   const dispatch = useDispatch();
   const { user, isAuthenticated } = useSelector((state) => state.auth);
+  const { userProgress, progressLoading } = useSelector((state) => state.simulation);
 
   useEffect(() => {
-    // We can pre-fetch labs here if we want them available globally
-    // for search or other features, though dashboard does it too.
+    // Fetch labs (idempotent in slice usually, but good to keep)
     dispatch(fetchLabs());
     
-    // Load user progress if authenticated
-    if (isAuthenticated && user?.id) {
+    // Load user progress if authenticated and not already loading/loaded
+    if (isAuthenticated && user?.id && !userProgress && !progressLoading) {
       console.log('Loading user progress on app initialization...');
       dispatch(loadUserProgress({ userId: user.id }));
     }
-  }, [dispatch, isAuthenticated, user]);
+  }, [dispatch, isAuthenticated, user, userProgress, progressLoading]);
 
   return <>{children}</>;
 };

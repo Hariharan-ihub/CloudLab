@@ -15,11 +15,19 @@ const OnboardingPage = () => {
     }
 
     if (isOnboarded) {
-        return <Navigate to="/" replace />;
+        const roleSlug = user?.selectedRole?.title ? slugify(user.selectedRole.title) : 'full-stack-developer';
+        return <Navigate to={`/${roleSlug}/services`} replace />;
     }
 
+    const getEffectivePhase = () => {
+        if (preLabPhase === 'role' && user?.selectedRole) return 'project';
+        return preLabPhase;
+    };
+
+    const effectivePhase = getEffectivePhase();
+
     const renderPhase = () => {
-        switch (preLabPhase) {
+        switch (effectivePhase) {
             case 'role':
                 return <RoleSelector />;
             case 'project':
@@ -41,17 +49,17 @@ const OnboardingPage = () => {
                 </div>
                 <div className="flex items-center gap-6">
                     <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${preLabPhase === 'role' ? 'bg-aws-orange' : 'bg-green-500'}`}></div>
+                        <div className={`w-2 h-2 rounded-full ${effectivePhase === 'role' ? 'bg-aws-orange' : 'bg-green-500'}`}></div>
                         <span className="text-xs font-bold opacity-80 uppercase tracking-widest">Role</span>
                     </div>
                     <div className="w-8 h-[1px] bg-white/20"></div>
                     <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${preLabPhase === 'project' ? 'bg-aws-orange' : preLabPhase === 'jenkins' || preLabPhase === 'completed' ? 'bg-green-500' : 'bg-white/20'}`}></div>
+                        <div className={`w-2 h-2 rounded-full ${effectivePhase === 'project' ? 'bg-aws-orange' : (effectivePhase === 'jenkins' || preLabPhase === 'completed') ? 'bg-green-500' : 'bg-white/20'}`}></div>
                         <span className="text-xs font-bold opacity-80 uppercase tracking-widest">Project</span>
                     </div>
                     <div className="w-8 h-[1px] bg-white/20"></div>
                     <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${preLabPhase === 'jenkins' ? 'bg-aws-orange' : preLabPhase === 'completed' ? 'bg-green-500' : 'bg-white/20'}`}></div>
+                        <div className={`w-2 h-2 rounded-full ${effectivePhase === 'jenkins' ? 'bg-aws-orange' : preLabPhase === 'completed' ? 'bg-green-500' : 'bg-white/20'}`}></div>
                         <span className="text-xs font-bold opacity-80 uppercase tracking-widest">Pipeline</span>
                     </div>
                 </div>

@@ -2,12 +2,13 @@ import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchLabs, clearActiveLab } from '../store/labSlice';
 import { fetchResources, resetSimulation } from '../store/simulationSlice';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Clock, BarChart, Server, Database, Shield, PlayCircle, Network } from 'lucide-react';
 
 const LabDashboard = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { roleSlug } = useParams();
   const { labs, loading, error } = useSelector((state) => state.lab);
   const { user } = useSelector(state => state.auth);
   const userId = user?.id;
@@ -96,7 +97,7 @@ const LabDashboard = () => {
 
             <div 
                 className="bg-gray-50 px-6 py-3 cursor-pointer hover:bg-aws-blue hover:text-white transition-colors flex justify-between items-center font-bold text-sm"
-                onClick={() => navigate(`/lab/${lab.labId}`)}
+                onClick={() => navigate(`/${roleSlug}/services/lab/${lab.labId}`)}
             >
                 Start Lab <span className="text-lg">→</span>
             </div>

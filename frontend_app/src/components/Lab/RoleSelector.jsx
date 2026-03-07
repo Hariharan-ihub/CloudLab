@@ -1,8 +1,10 @@
 import React from 'react';
 import { useDispatch } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { setSelectedRole, setPreLabPhase } from '../../store/simulationSlice';
 import { saveRole } from '../../store/authSlice';
 import { Layout, Cloud, Database, Shield, Settings, Terminal } from 'lucide-react';
+import { slugify } from '../../utils/slugify';
 
 const roles = [
     { id: 'fullstack', title: 'Full Stack Developer', iconName: 'Layout', color: 'bg-blue-500', available: true },
@@ -25,6 +27,7 @@ const IconComponent = ({ iconName, size }) => {
 
 const RoleSelector = () => {
     const dispatch = useDispatch();
+    const navigate = useNavigate();
 
     const handleSelectRole = (role) => {
         if (!role.available) return;
@@ -34,6 +37,9 @@ const RoleSelector = () => {
         dispatch(setSelectedRole(serializableRole));
         dispatch(saveRole(serializableRole));
         dispatch(setPreLabPhase('project'));
+        
+        const roleSlug = slugify(role.title);
+        navigate(`/${roleSlug}/onboarding`);
     };
 
     return (

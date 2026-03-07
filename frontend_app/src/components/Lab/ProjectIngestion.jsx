@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { setProjectLink, setRepoInfo, setPreLabPhase } from '../../store/simulationSlice';
+import { saveRepoInfo } from '../../store/authSlice';
 import axios from 'axios';
 import { Github, Link, AlertCircle, CheckCircle, ArrowRight, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -45,6 +46,7 @@ const ProjectIngestion = () => {
 
     const handleContinue = () => {
         if (repoInfo) {
+            dispatch(saveRepoInfo(repoInfo));
             dispatch(setPreLabPhase('jenkins'));
         }
     };
